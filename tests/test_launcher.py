@@ -301,37 +301,42 @@ def _mock_full_setup(bootstrap,monkeypatch):
 
 def test_no_registry_defaults_to_huggingface_on_cpu(launcher,monkeypatch,capsys):
     # With no registry configured and no explicit source, cpu setup falls back to
-    # released HuggingFace weights (announced, not silent) rather than failing.
+    # the released HuggingFace registry mirror (announced, not silent) rather than
+    # failing, and configures the model package to read that hf:// mirror.
     _,bootstrap,root=launcher
     monkeypatch.delenv("DECODERTCR_REGISTRY",raising=False)
     _mock_full_setup(bootstrap,monkeypatch)
-    monkeypatch.setattr(bootstrap,"ensure_huggingface",lambda *a,**k:None)
-    monkeypatch.setattr(bootstrap,"configure_registry",lambda *a,**k:pytest.fail("no registry to configure"))
+    configured=[]
+    monkeypatch.setattr(bootstrap,"configure_registry",lambda python,reg,env:configured.append(reg))
     monkeypatch.setattr(bootstrap,"probe",lambda *a,**k:None)
     assert bootstrap.main(["setup","--device","cpu"],root=root) == 0
     assert "huggingface" in capsys.readouterr().out.lower()
+    assert configured == [bootstrap.hf_registry_spec(None)]
     saved=json.loads((root/".tcr/runtime.json").read_text())
     assert saved["weight_source"] == "huggingface"
-    assert saved["hf_repo"] == bootstrap.MODEL_HF_REPOS["DecoderTCR-ESMC_300M"]
+    assert saved["hf_repo"] is None
 
 
-def test_no_registry_default_errors_when_model_has_no_hf_repo(launcher,monkeypatch,capsys):
-    # A model without a published HuggingFace repo cannot silently default to it.
+def test_no_registry_default_targets_every_model(launcher,monkeypatch):
+    # The one published mirror carries every member, so even 600M defaults to it.
     _,bootstrap,root=launcher
     monkeypatch.delenv("DECODERTCR_REGISTRY",raising=False)
     _mock_full_setup(bootstrap,monkeypatch)
-    monkeypatch.setattr(bootstrap,"ensure_huggingface",lambda *a,**k:None)
-    assert bootstrap.main(["setup","--device","cpu","--model","esmc-600m"],root=root) == 1
-    assert "huggingface" in capsys.readouterr().err.lower()
+    configured=[]
+    monkeypatch.setattr(bootstrap,"configure_registry",lambda python,reg,env:configured.append(reg))
+    monkeypatch.setattr(bootstrap,"probe",lambda *a,**k:None)
+    assert bootstrap.main(["setup","--device","cpu","--model","esmc-600m"],root=root) == 0
+    assert configured == [bootstrap.hf_registry_spec(None)]
+    saved=json.loads((root/".tcr/runtime.json").read_text())
+    assert saved["weight_source"] == "huggingface" and saved["model"] == "DecoderTCR-ESMC_600M"
 
 
 def test_registry_is_used_when_configured_without_explicit_source(launcher,monkeypatch):
-    # When a registry is configured, it remains the default (no HuggingFace fallback).
+    # When a local registry is configured, it remains the default (no HuggingFace fallback).
     _,bootstrap,root=launcher
     registry=root/"shared registry"
     registry.mkdir()
     _mock_full_setup(bootstrap,monkeypatch)
-    monkeypatch.setattr(bootstrap,"ensure_huggingface",lambda *a,**k:pytest.fail("registry configured; no HuggingFace install"))
     configured=[]
     monkeypatch.setattr(bootstrap,"configure_registry",lambda python,reg,env:configured.append(reg))
     monkeypatch.setattr(bootstrap,"probe",lambda *a,**k:None)
@@ -341,9 +346,10 @@ def test_registry_is_used_when_configured_without_explicit_source(launcher,monke
     assert saved["weight_source"] == "registry"
 
 
-def test_huggingface_setup_installs_hf_hub_and_skips_registry(launcher,monkeypatch):
-    # A HuggingFace CPU setup needs no --registry: it installs huggingface_hub,
-    # never calls configure_registry, and saves weight_source=huggingface settings.
+def test_huggingface_setup_configures_the_hub_mirror_without_a_local_registry(launcher,monkeypatch):
+    # A HuggingFace CPU setup needs no --registry: huggingface_hub ships with the
+    # DecoderTCR package, so it configures the hf:// Hub mirror and saves
+    # weight_source=huggingface settings.
     _,bootstrap,root=launcher
     monkeypatch.delenv("DECODERTCR_REGISTRY",raising=False)
     monkeypatch.setattr(bootstrap,"ensure_uv",lambda *a:["uv","--no-config"])
@@ -354,19 +360,18 @@ def test_huggingface_setup_installs_hf_hub_and_skips_registry(launcher,monkeypat
         python.touch()
         return python
     monkeypatch.setattr(bootstrap,"install_decoder",install_decoder)
-    hf_installs=[]
-    monkeypatch.setattr(bootstrap,"ensure_huggingface",lambda uv,python,env:hf_installs.append(Path(python)))
-    monkeypatch.setattr(bootstrap,"configure_registry",lambda *a,**k:pytest.fail("registry must not be configured for a HuggingFace source"))
+    configured=[]
+    monkeypatch.setattr(bootstrap,"configure_registry",lambda python,reg,env:configured.append((Path(python),reg)))
     monkeypatch.setattr(bootstrap,"ensure_germlines",lambda *a,**k:None)
     monkeypatch.setattr(bootstrap,"check_setup_resources",lambda *a,**k:None)
     probes=[]
     monkeypatch.setattr(bootstrap,"probe",lambda settings,env,**k:probes.append(settings))
     assert bootstrap.main(["setup","--device","cpu","--weight-source","huggingface"],root=root) == 0
     model_env=root/".tcr/envs/model"
-    assert hf_installs == [bootstrap.python_in(model_env)]
+    assert configured == [(bootstrap.python_in(model_env), bootstrap.hf_registry_spec(None))]
     saved=json.loads((root/".tcr/runtime.json").read_text())
     assert saved["weight_source"] == "huggingface"
-    assert saved["hf_repo"] == bootstrap.MODEL_HF_REPOS["DecoderTCR-ESMC_300M"]
+    assert saved["hf_repo"] is None
     assert saved["checkpoint"] is None and saved["device"] == "cpu"
     assert probes and probes[-1]["weight_source"] == "huggingface"
 
@@ -555,7 +560,7 @@ def test_deep_apple_probe_checks_decoder_bundle_identity(launcher,monkeypatch,mo
 
 def test_deep_cpu_probe_resolves_the_registry_release_identity(launcher,monkeypatch):
     # The CPU/CUDA deep probe confirms the exact registry release resolves via the
-    # decodertcr_internal registry by model ID; no local checkpoint file is inspected.
+    # DecoderTCR registry by model ID; no local checkpoint file is inspected.
     from types import ModuleType
 
     _,bootstrap,_=launcher
@@ -563,14 +568,14 @@ def test_deep_cpu_probe_resolves_the_registry_release_identity(launcher,monkeypa
     torch.__version__="synthetic"
     monkeypatch.setitem(sys.modules,"torch",torch)
     resolved=[]
-    dt=ModuleType("decodertcr_internal")
+    dt=ModuleType("DecoderTCR")
     dt.__version__="synthetic"
-    dt.models=lambda:["release"]
-    dt.info=lambda model_id:(resolved.append(model_id) or {
+    dt.models=lambda *a,**k:["release"]
+    dt.info=lambda model_id,registry=None:(resolved.append(model_id) or {
         "model_id":model_id,
         "member":{"sequence_convention":"esmc","weights":{"sha256":"f"*64}}})
     dt.normalize_gene=lambda gene:gene
-    monkeypatch.setitem(sys.modules,"decodertcr_internal",dt)
+    monkeypatch.setitem(sys.modules,"DecoderTCR",dt)
     def run(command,**kwargs):
         if "info=dt.info" in command[2]:
             monkeypatch.setattr(sys,"argv",["-c",*command[3:]])

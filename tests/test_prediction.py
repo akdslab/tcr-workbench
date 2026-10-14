@@ -590,13 +590,13 @@ def test_sequence_convention_guard_fails_closed_on_declared_mismatch():
 
 def test_germline_fingerprint_includes_stitchr_sibling_data(tmp_path, monkeypatch):
     source = tmp_path / "src"
-    # A minimal installed decodertcr_internal package with a configured registry,
-    # plus a Stitchr sibling whose germline data is the fingerprinted resource.
-    decoder = source / "decodertcr_internal"
+    # A minimal installed DecoderTCR package with a configured registry, plus a
+    # Stitchr sibling whose germline data is the fingerprinted resource.
+    decoder = source / "DecoderTCR"
     decoder.mkdir(parents=True)
     (decoder / "__init__.py").write_text(
         "__version__ = " + repr(p.MIN_DECODER_VERSION) + "\n"
-        "def models():\n    return ['decodertcr@1.5.0:300M']\n"
+        "def models(*a, **k):\n    return ['decodertcr@1.5.0:300M']\n"
     )
     (decoder / "core.py").write_text("def registry_root():\n    return 'configured-registry'\n")
     stitchr = source / "Stitchr"
@@ -631,75 +631,74 @@ def test_weight_source_descriptor_selects_source_without_cross_fallback():
     registry = p.weight_source_descriptor("esmc-300m")
     assert registry == {"kind": "registry", "model_id": "decodertcr@1.5.0:300M"}
     hf = p.weight_source_descriptor("esmc-300m", "huggingface")
-    assert hf["kind"] == "huggingface" and hf["repo"].endswith("DecoderTCR-ESMC-300M-test")
-    assert hf["revision"] is None
-    override = p.weight_source_descriptor("esmc-300m", "huggingface", hf_repo="me/custom", hf_revision="abc123")
-    assert override["repo"] == "me/custom" and override["revision"] == "abc123"
-    # A model without a published repo fails closed rather than reverting to the registry.
-    with pytest.raises(ValueError, match="no HuggingFace source"):
-        p.weight_source_descriptor("esmc-600m", "huggingface")
+    assert hf["kind"] == "huggingface" and hf["model_id"] == "decodertcr@1.5.0:300M"
+    assert hf["registry"] == "hf://Decoder-CHI/DecoderTCR-staging/registry"
+    override = p.weight_source_descriptor("esmc-300m", "huggingface", hf_repo="me/custom")
+    assert override["registry"] == "hf://me/custom/registry"
+    # Every member resolves from the one published mirror; the 6B member keeps its id.
+    assert p.weight_source_descriptor("esmc-6b", "huggingface")["model_id"] == "decodertcr@1.5.0:6B"
+    # A malformed override fails closed rather than forming a bogus registry spec.
+    with pytest.raises(ValueError, match="OWNER/NAME"):
+        p.weight_source_descriptor("esmc-300m", "huggingface", hf_repo="not-a-repo")
 
 
 def test_model_fingerprint_records_weight_source(monkeypatch):
     monkeypatch.setattr(p, "_environment_fingerprint", lambda python, root, source=None: {"src": source})
     registry = p._model_fingerprint("/decoder", sys.executable, "esmc-300m")
     assert registry["weight_source"] == "registry" and registry["src"]["kind"] == "registry"
-    hf = p._model_fingerprint("/decoder", sys.executable, "esmc-300m",
-                              weight_source="huggingface", hf_revision="pin1")
-    assert hf["weight_source"] == "huggingface"
-    assert hf["src"]["kind"] == "huggingface" and hf["src"]["repo"].endswith("300M-test")
-    assert hf["src"]["revision"] == "pin1"
+    assert "hf_registry" not in registry
+    hf = p._model_fingerprint("/decoder", sys.executable, "esmc-300m", weight_source="huggingface")
+    assert hf["weight_source"] == "huggingface" and hf["src"]["kind"] == "huggingface"
+    assert hf["src"]["registry"] == "hf://Decoder-CHI/DecoderTCR-staging/registry"
+    # The resolved hf:// registry spec is threaded for the worker --registry argument.
+    assert hf["hf_registry"] == "hf://Decoder-CHI/DecoderTCR-staging/registry"
 
 
 def _hf_metadata(tmp_path):
     return {
-        "decoder_origin": str(tmp_path / "decodertcr_internal/__init__.py"),
-        "decoder_version": p.MIN_DECODER_VERSION_HF,
+        "decoder_origin": str(tmp_path / "DecoderTCR/__init__.py"),
+        "decoder_version": p.MIN_DECODER_VERSION,
         "germline_roots": [],
         "packages": [["torch", "2.10.0"], ["huggingface_hub", "2.0.0"]],
-        "hf_repo": "org/repo",
-        "hf_revision": "c" * 40,
-        "hf_weights_sha256": "d" * 64,
-        "hf_weights_file": "model.safetensors",
-        "hf_size_bytes": 1332022912,
-        "hf_backbone": "esmc",
-        "hf_arch": "DecoderTCRC_300M",
+        "hf_registry": "hf://org/repo/registry",
+        "catalog_sha256": "a" * 64,
+        "artifact_sha256": "d" * 64,
+        "manifest_sha256": "b" * 64,
         "model_sequence_convention": "v2",
+        "model_state": "available",
     }
 
 
-def test_environment_fingerprint_huggingface_binds_repo_revision_and_hash(tmp_path, monkeypatch):
-    source = {"kind": "huggingface", "repo": "org/repo", "revision": None}
+def test_environment_fingerprint_huggingface_binds_registry_and_artifact_hash(tmp_path, monkeypatch):
+    source = {"kind": "huggingface", "registry": "hf://org/repo/registry",
+              "model_id": "decodertcr@1.5.0:300M"}
     metadata = _hf_metadata(tmp_path)
-    # A HuggingFace source must not require a configured internal registry.
-    metadata["registry_error"] = "no registry configured"
     monkeypatch.setattr(p.subprocess, "run",
                         lambda *a, **k: SimpleNamespace(returncode=0, stdout=json.dumps(metadata)))
     identity = p._environment_fingerprint(tmp_path / "python", tmp_path, source)
-    assert identity["hf_repo"] == "org/repo"
-    assert identity["hf_revision"] == "c" * 40
-    assert identity["hf_weights_sha256"] == "d" * 64
-    assert identity["hf_size_bytes"] == 1332022912
+    assert identity["hf_registry"] == "hf://org/repo/registry"
+    assert identity["artifact_sha256"] == "d" * 64
+    assert identity["catalog_sha256"] == "a" * 64
     assert identity["model_sequence_convention"] == "v2"
-    # The resolved commit is bound into the environment digest.
+    # The resolved member artifact hash is bound into the environment digest.
     baseline = identity["environment_sha256"]
-    metadata["hf_revision"] = "e" * 40
+    metadata["artifact_sha256"] = "e" * 64
     changed = p._environment_fingerprint(tmp_path / "python", tmp_path, source)
-    assert changed["environment_sha256"] != baseline and changed["hf_revision"] == "e" * 40
+    assert changed["environment_sha256"] != baseline and changed["artifact_sha256"] == "e" * 64
 
 
 def test_environment_fingerprint_huggingface_errors_are_actionable(tmp_path, monkeypatch):
-    source = {"kind": "huggingface", "repo": "org/repo", "revision": None}
+    source = {"kind": "huggingface", "registry": "hf://org/repo/registry",
+              "model_id": "decodertcr@1.5.0:300M"}
     metadata = _hf_metadata(tmp_path)
     holder = {"data": metadata}
     monkeypatch.setattr(p.subprocess, "run",
                         lambda *a, **k: SimpleNamespace(returncode=0, stdout=json.dumps(holder["data"])))
-    # Unreachable HuggingFace weights raise a clear, actionable error.
-    unreachable = dict(metadata, hf_error="HfHubHTTPError: 404 Not Found")
-    holder["data"] = unreachable
+    # An unreachable HuggingFace registry mirror raises a clear, actionable error.
+    holder["data"] = dict(metadata, hf_error="HfHubHTTPError: 404 Not Found")
     with pytest.raises(ValueError, match="HuggingFace weights are not reachable"):
         p._environment_fingerprint(tmp_path / "python", tmp_path, source)
-    # from_pretrained requires at least the 0.5.0 package.
+    # The registry-resolving API requires at least the 1.5.0 package.
     holder["data"] = dict(metadata, decoder_version="0.4.0")
     with pytest.raises(ValueError, match="too old"):
         p._environment_fingerprint(tmp_path / "python", tmp_path, source)
@@ -869,7 +868,7 @@ def test_decoder_cache_fingerprint_includes_transitive_hla_source(tmp_path, monk
     assert first["workbench_adapter_sha256"] == report.source_digest()
     # Weights are registry-resolved: no local source-checkout hash is produced.
     assert "decoder_source_sha256" not in first and "checkpoint_sha256" not in first
-    assert first["decoder_package"] == "decodertcr_internal"
+    assert first["decoder_package"] == "DecoderTCR"
     hla.write_text("# HLA contract v2")
     second = p._decoder_fingerprint(root, sys.executable)
     assert first["workbench_adapter_sha256"] != second["workbench_adapter_sha256"]

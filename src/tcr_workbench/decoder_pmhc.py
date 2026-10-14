@@ -60,7 +60,6 @@ class PMHCOptions(BaseModel):
     timeout: Optional[float] = Field(default=None, gt=0, allow_inf_nan=False)
     weight_source: str = "registry"
     hf_repo: Optional[str] = None
-    hf_revision: Optional[str] = None
 
 
 class PanelOptions(BaseModel):

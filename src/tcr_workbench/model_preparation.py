@@ -87,10 +87,16 @@ class AppleProof(TimingProof):
     source_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
 
 
+def _weight_source(options):
+    """Build the weight-source descriptor (local mirror or hf:// spec) from options."""
+    from .prediction import weight_source_descriptor
+    return weight_source_descriptor(options["model"], options.get("weight_source", "registry"),
+                                    options.get("hf_repo"))
+
+
 def _identity(options):
-    spec = resolve_model(options["model"])
     identity = {**_decoder_fingerprint(options["decoder_dir"], options["python_executable"],
-                                       model_id=spec.model_id),
+                                       source=_weight_source(options)),
                 "model": options["model"], "device": options["device"], "precision": options["precision"]}
     if options["device"] == "apple":
         # The converted bundle is a preparation OUTPUT; the registry artifact hash
@@ -116,12 +122,13 @@ def _lock(path):
 
 def _registry_artifact_path(options, model_id):
     """Resolve the registry safetensors path in the model environment for conversion."""
+    spec = _weight_source(options).get("registry") or ""
     with tempfile.TemporaryDirectory(prefix="tcr-artifact-") as folder:
         output = Path(folder) / "artifact.txt"
-        code = ("import sys; from decodertcr_internal.registry import Registry; "
-                "r=Registry(None).resolve(sys.argv[1]); "
-                "open(sys.argv[2],'w').write(str(r.bundle / r.member['weights']['path']))")
-        _execute([options["python_executable"], "-c", code, model_id, str(output)],
+        code = ("import sys; from DecoderTCR.registry import Registry; "
+                "reg=Registry(sys.argv[3] or None); r=reg.resolve(sys.argv[1]); "
+                "open(sys.argv[2],'w').write(str(reg.verify_artifact(r.bundle, r.member['weights'])))")
+        _execute([options["python_executable"], "-c", code, model_id, str(output), spec],
                  Path(options["decoder_dir"]), options.get("timeout"))
         return Path(output.read_text().strip())
 
@@ -135,6 +142,8 @@ def _fixture(options, output, *, backend, checkpoint=None, reference=None):
                "--precision", options["precision"]]
     if backend == "torch":
         command += ["--model-id", resolve_model(options["model"]).model_id]
+        if registry_spec := _weight_source(options).get("registry"):
+            command += ["--registry", registry_spec]
     else:
         command += ["--checkpoint", str(checkpoint)]
     if reference is not None:
@@ -147,6 +156,8 @@ def _inspect(options, output):
     command = [options["python_executable"], str(Path(__file__).parent / "backends/preparation_worker.py"),
                "--backend", "torch", "--inspect-only", "--model-id", resolve_model(options["model"]).model_id,
                "--model", options["model"], "--output", str(output)]
+    if registry_spec := _weight_source(options).get("registry"):
+        command += ["--registry", registry_spec]
     _execute(command, Path(options["decoder_dir"]), options.get("timeout"))
     info = InventoryProof.model_validate_json(output.read_text())
     spec = resolve_model(options["model"])

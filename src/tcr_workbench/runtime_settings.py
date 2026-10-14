@@ -8,13 +8,13 @@ from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from .backends.precision_contract import Precision
-from .model_registry import (huggingface_repo, normalize_device, normalize_weight_source,
+from .model_registry import (huggingface_registry, normalize_device, normalize_weight_source,
                              resolve_model, validate_backend)
 
 DEFAULTS = {"precision": "float32", "model": "DecoderTCR-ESMC_300M", "device": "cpu", "batch_size": 1,
             "token_budget": 4096, "cache_bytes": 64 * 1024 * 1024, "weight_source": "registry"}
 KEYS = ("precision", "decoder_dir", "python_executable", "model", "device", "checkpoint", "mlx_python",
-        "batch_size", "token_budget", "cache_bytes", "timeout", "weight_source", "hf_repo", "hf_revision")
+        "batch_size", "token_budget", "cache_bytes", "timeout", "weight_source", "hf_repo")
 PATHS = {"decoder_dir", "python_executable", "checkpoint", "mlx_python"}
 
 
@@ -40,13 +40,13 @@ class RuntimeSettings(BaseModel):
     token_budget: int = Field(default=4096, ge=3, le=262144)
     cache_bytes: int = Field(default=64 * 1024 * 1024, ge=0, le=1024**3)
     timeout: Optional[float] = Field(default=None, gt=0, allow_inf_nan=False)
-    # Registry weights are resolved by model ID; huggingface weights are pulled by
-    # from_pretrained from hf_repo (default: the model's published repo) at an
-    # optional pinned hf_revision. A HuggingFace token, when needed, is read from
-    # the HF_TOKEN environment variable and never stored in settings.
+    # Both sources resolve weights by exact model ID through the DecoderTCR package:
+    # "registry" reads the configured local mirror, "huggingface" reads the Hub
+    # registry mirror (hf://OWNER/REPOSITORY/PREFIX). hf_repo overrides the default
+    # Hub repository (OWNER/NAME). A HuggingFace token, when a private repo needs
+    # one, is read from the HF_TOKEN environment variable and never stored here.
     weight_source: Literal["registry", "huggingface"] = "registry"
     hf_repo: Optional[str] = None
-    hf_revision: Optional[str] = None
 
 
 def resolve_settings(args):
@@ -78,8 +78,8 @@ def resolve_settings(args):
         if options["device"] == "apple":
             raise ValueError("HuggingFace weights currently run on cpu or cuda only; "
                              "Apple MLX conversion from HuggingFace is not yet supported")
-        # Fail closed now if no repository can be resolved for this model.
-        huggingface_repo(options["model"], options.get("hf_repo"))
+        # Fail closed now if the override cannot form a valid Hub registry spec.
+        huggingface_registry(options.get("hf_repo"))
     if options["device"] != "apple" and getattr(args, "mlx_python", None) is None:
         options["mlx_python"] = None
     # validate_backend rejects a checkpoint on CPU/CUDA: those devices resolve weights

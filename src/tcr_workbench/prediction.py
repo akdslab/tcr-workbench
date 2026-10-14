@@ -24,7 +24,7 @@ import numpy as np
 import polars as pl
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 
-from .model_registry import (huggingface_repo, normalize_device, normalize_weight_source,
+from .model_registry import (huggingface_registry, normalize_device, normalize_weight_source,
                             resolve_model, validate_backend)
 
 PathLike = Union[str, Path]
@@ -32,11 +32,10 @@ AA = "ACDEFGHIKLMNPQRSTVWY"
 GENES = ["trav", "traj", "cdr3a", "trbv", "trbj", "cdr3b"]
 COMPONENTS = GENES + ["hla", "peptide"]
 DEFAULT_MODEL = "DecoderTCR-ESMC_300M"
-# Minimum decodertcr_internal package that publishes the registry-resolved
-# releases and sequence conventions this adapter targets.
-MIN_DECODER_VERSION = "0.4.0"
-# from_pretrained (HuggingFace weight loading) was introduced in 0.5.0.
-MIN_DECODER_VERSION_HF = "0.5.0"
+# Minimum DecoderTCR package that publishes the registry-resolved releases, the
+# sequence conventions this adapter targets, and the hf:// Hub registry mirror
+# that serves every member (local mirror and Hub mirror share this loader).
+MIN_DECODER_VERSION = "1.5.0"
 
 
 def _version_tuple(value: str) -> tuple:
@@ -667,31 +666,33 @@ def _annotate_gene_resolution(frame: pl.DataFrame) -> pl.DataFrame:
 
 
 def weight_source_descriptor(
-    model: str, weight_source: str = "registry",
-    hf_repo: Optional[str] = None, hf_revision: Optional[str] = None,
+    model: str, weight_source: str = "registry", hf_repo: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Describe where weights come from without importing the model environment.
 
-    Registry weights are keyed by the released model ID; HuggingFace weights are
-    keyed by repository and, when pinned, an explicit revision. This never falls
-    back across sources: an unresolvable HuggingFace repo fails closed.
+    Both sources are keyed by the released model ID and resolved through the same
+    DecoderTCR package registry: "registry" uses the configured local mirror,
+    "huggingface" uses the Hub mirror ``hf://OWNER/REPOSITORY/PREFIX``. This never
+    falls back across sources: an invalid HuggingFace repository fails closed.
     """
     weight_source = normalize_weight_source(weight_source)
+    model_id = resolve_model(model).model_id
     if weight_source == "huggingface":
-        return {"kind": "huggingface", "repo": huggingface_repo(model, hf_repo),
-                "revision": (hf_revision or "").strip() or None}
-    return {"kind": "registry", "model_id": resolve_model(model).model_id}
+        return {"kind": "huggingface", "registry": huggingface_registry(hf_repo),
+                "model_id": model_id}
+    return {"kind": "registry", "model_id": model_id}
 
 
 def _model_fingerprint(
     decoder_dir: PathLike, python_executable: PathLike, model: str, *,
     weight_source: str = "registry", hf_repo: Optional[str] = None,
-    hf_revision: Optional[str] = None,
 ) -> Dict[str, Any]:
     spec = resolve_model(model)
-    source = weight_source_descriptor(model, weight_source, hf_repo, hf_revision)
+    source = weight_source_descriptor(model, weight_source, hf_repo)
     fingerprint = {"model": spec.name, "model_id": spec.model_id, "weight_source": source["kind"],
                    **_decoder_fingerprint(decoder_dir, python_executable, source=source)}
+    if source["kind"] == "huggingface":
+        fingerprint["hf_registry"] = source["registry"]
     verify_sequence_convention(fingerprint)
     return fingerprint
 
@@ -723,11 +724,11 @@ def _decoder_fingerprint(
 ) -> Dict[str, Any]:
     """Fingerprint the installed package, weight-source identity and environment.
 
-    Registry weights live in the shared decodertcr_internal registry and are
-    resolved by the model environment; HuggingFace weights are resolved by
-    from_pretrained. This never scans model weights or requires a source
-    checkout. When a ``source`` (or legacy ``model_id``) is given, the released
-    artifact identity is bound so cached scores follow the exact weights.
+    Weights are resolved by the DecoderTCR package registry in the model
+    environment, from either the configured local mirror or the hf:// Hub mirror.
+    This never scans model weights or requires a source checkout. When a
+    ``source`` (or legacy ``model_id``) is given, the released artifact identity
+    is bound so cached scores follow the exact weights.
     """
     root = Path(decoder_dir).resolve()
     python = Path(python_executable).absolute()
@@ -741,7 +742,7 @@ def _decoder_fingerprint(
     from .report import source_digest
     adapter_sha256 = source_digest()
     return {
-        "decoder_package": "decodertcr_internal",
+        "decoder_package": "DecoderTCR",
         "workbench_adapter_sha256": adapter_sha256,
         "python_executable": str(python),
         "python_sha256": file_sha256(python),
@@ -780,11 +781,12 @@ def _environment_fingerprint(
 ) -> Dict[str, str]:
     """Identify the installed package, weight-source identity and germline resources.
 
-    Query decodertcr_internal, the configured weight source (shared registry or
-    HuggingFace) and stitchr resources in the model environment; do not import
-    torch or instantiate a model to decide whether to reuse scores. Registry
-    weights are resolved from the shared registry; HuggingFace resolution reads
-    only the small config.json and the resolved commit, never the weights file.
+    Query DecoderTCR, the configured weight source (local mirror or hf:// Hub
+    mirror) and stitchr resources in the model environment; do not import torch or
+    instantiate a model to decide whether to reuse scores. Both sources resolve
+    through the same registry: ``dt.info(model_id, registry=spec)`` reads only the
+    catalog, manifest and validation metadata, never the weights file. For the Hub
+    mirror this pins the member by its catalog/manifest/artifact sha256.
 
     ``source`` is a descriptor dict; a bare string is accepted as a legacy
     registry model ID and ``None`` means registry with no bound release.
@@ -799,18 +801,20 @@ import importlib.metadata as metadata
 import importlib.util
 import importlib
 import json
-import os
 from pathlib import Path
 import platform
 import sys
 source = {source!r}
 kind = source.get('kind', 'registry')
+# "huggingface" passes the hf:// Hub registry spec; "registry" uses the configured
+# local mirror (registry=None lets the package read its configured default).
+registry_spec = source.get('registry')
 result = {{'python_version': sys.version, 'platform': platform.platform()}}
-spec = importlib.util.find_spec('decodertcr_internal')
+spec = importlib.util.find_spec('DecoderTCR')
 result['decoder_origin'] = str(Path(spec.origin).resolve()) if spec and spec.origin else None
 if spec is None:
     print(json.dumps(result)); sys.exit(0)
-dt = importlib.import_module('decodertcr_internal')
+dt = importlib.import_module('DecoderTCR')
 result['decoder_version'] = getattr(dt, '__version__', None)
 germline_roots = []
 for name in ('Stitchr', 'stitchr'):
@@ -820,45 +824,29 @@ for name in ('Stitchr', 'stitchr'):
 if importlib.util.find_spec('Stitchr') is not None:
     sf = importlib.import_module('Stitchr.stitchrfunctions')
     germline_roots.append(str(Path(sf.data_dir).resolve()))
-if kind == 'registry':
+if kind == 'huggingface':
+    result['hf_registry'] = registry_spec
+elif registry_spec is None:
     try:
-        from decodertcr_internal.core import registry_root
+        from DecoderTCR.core import registry_root
         result['registry_root'] = str(registry_root())
     except Exception as exc:
         result['registry_error'] = str(exc)
-    model_id = source.get('model_id')
-    if 'registry_error' not in result:
-        try:
-            if model_id is not None:
-                info = dt.info(model_id)
-                result['catalog_sha256'] = info['catalog_sha256']
-                result['artifact_sha256'] = info['member']['weights']['sha256']
-                result['manifest_sha256'] = info['manifest']['sha256']
-                result['model_sequence_convention'] = info['member']['sequence_convention']
-                result['model_state'] = info['state']
-            else:
-                dt.models()
-        except Exception as exc:
-            result['registry_error'] = str(exc)
-elif kind == 'huggingface':
+model_id = source.get('model_id')
+if 'registry_error' not in result:
     try:
-        from huggingface_hub import hf_hub_download, model_info
-        repo = source['repo']
-        revision = source.get('revision')
-        token = os.environ.get('HF_TOKEN')
-        resolved = model_info(repo, revision=revision, token=token).sha
-        cfg = json.loads(Path(hf_hub_download(
-            repo, 'config.json', revision=resolved, token=token)).read_text())
-        result['hf_repo'] = repo
-        result['hf_revision'] = resolved
-        result['hf_weights_sha256'] = cfg['weights_sha256']
-        result['hf_weights_file'] = cfg.get('weights_file', 'model.safetensors')
-        result['hf_size_bytes'] = cfg['size_bytes']
-        result['hf_backbone'] = cfg['backbone']
-        result['hf_arch'] = cfg['arch']
-        result['model_sequence_convention'] = cfg['sequence_convention']
+        if model_id is not None:
+            info = dt.info(model_id, registry=registry_spec)
+            result['catalog_sha256'] = info['catalog_sha256']
+            result['artifact_sha256'] = info['member']['weights']['sha256']
+            result['manifest_sha256'] = info['manifest']['sha256']
+            result['model_sequence_convention'] = info['member']['sequence_convention']
+            result['model_state'] = info['state']
+        else:
+            dt.models(registry=registry_spec)
     except Exception as exc:
-        result['hf_error'] = f'{{type(exc).__name__}}: {{exc}}'
+        key = 'hf_error' if kind == 'huggingface' else 'registry_error'
+        result[key] = f'{{type(exc).__name__}}: {{exc}}'
 packages = sorted((d.metadata.get('Name', ''), d.version) for d in metadata.distributions())
 result['germline_roots'] = sorted(set(germline_roots))
 result['packages'] = packages
@@ -875,40 +863,39 @@ print(json.dumps(result))
             check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
-        raise RuntimeError("could not inspect the decodertcr_internal Python environment") from exc
+        raise RuntimeError("could not inspect the DecoderTCR Python environment") from exc
     if process.returncode:
-        raise RuntimeError(f"could not inspect decodertcr_internal environment: {process.stderr[-2000:]}")
+        raise RuntimeError(f"could not inspect DecoderTCR environment: {process.stderr[-2000:]}")
     try:
         info = json.loads(process.stdout)
     except (ValueError, TypeError) as exc:
-        raise ValueError("decodertcr_internal environment returned invalid metadata") from exc
+        raise ValueError("DecoderTCR environment returned invalid metadata") from exc
     if info.get("decoder_origin") is None:
         raise ValueError(
-            "decodertcr_internal is not installed in the selected Python environment; "
+            "DecoderTCR is not installed in the selected Python environment; "
             "run setup to install it and configure the registry"
         )
     version = info.get("decoder_version")
-    minimum = MIN_DECODER_VERSION_HF if kind == "huggingface" else MIN_DECODER_VERSION
-    if version is None or _version_tuple(version) < _version_tuple(minimum):
+    if version is None or _version_tuple(version) < _version_tuple(MIN_DECODER_VERSION):
         raise ValueError(
-            f"decodertcr_internal {version} is too old; install >= {minimum}"
+            f"DecoderTCR {version} is too old; install >= {MIN_DECODER_VERSION}"
         )
-    if kind == "registry":
-        if info.get("registry_error"):
-            raise ValueError(
-                "decodertcr_internal registry is not available: "
-                f"{info['registry_error']}. Configure it with "
-                "`decodertcr configure --registry <root>` or set DECODERTCR_REGISTRY"
-            )
-        if info.get("model_state") == "blocked":
-            raise ValueError(f"model {source.get('model_id')} is blocked in the registry inventory")
-    elif kind == "huggingface":
+    if kind == "huggingface":
         if info.get("hf_error"):
             raise ValueError(
                 "HuggingFace weights are not reachable: "
                 f"{info['hf_error']}. Check the repository id, network access and, for a "
                 "private or gated repo, the HF_TOKEN environment variable."
             )
+    else:
+        if info.get("registry_error"):
+            raise ValueError(
+                "DecoderTCR registry is not available: "
+                f"{info['registry_error']}. Configure it with "
+                "`decodertcr configure --registry <root>` or set DECODERTCR_PUBLIC_REGISTRY"
+            )
+    if info.get("model_state") == "blocked":
+        raise ValueError(f"model {source.get('model_id')} is blocked in the registry inventory")
     germlines = hashlib.sha256()
     for package_dir in info.pop("germline_roots", []):
         package = Path(package_dir)
@@ -920,9 +907,8 @@ print(json.dumps(result))
     identity = {"environment_sha256": environment, "germline_sha256": germlines.hexdigest(),
                 "decoder_version": version, "decoder_origin": info["decoder_origin"],
                 "registry_root": info.get("registry_root", "")}
-    for key in ("catalog_sha256", "artifact_sha256", "manifest_sha256", "model_sequence_convention",
-                "hf_repo", "hf_revision", "hf_weights_sha256", "hf_weights_file", "hf_size_bytes",
-                "hf_backbone", "hf_arch"):
+    for key in ("catalog_sha256", "artifact_sha256", "manifest_sha256",
+                "model_sequence_convention", "hf_registry"):
         if key in info:
             identity[key] = info[key]
     return identity
@@ -995,14 +981,13 @@ def run_decoder(
     mhc_reference: Optional[PathLike] = None,
     weight_source: str = "registry",
     hf_repo: Optional[str] = None,
-    hf_revision: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Run the selected backend atomically; reuse only fully matching hashes.
 
-    Registry weights are identified by their released artifact hash, not scanned
-    from disk; HuggingFace weights are identified by repository, resolved commit
-    and the config-declared weights hash. Any mismatch in model, input, weight
-    identity, device or existing output requires force=True.
+    Weights are identified by their released artifact hash (catalog, manifest and
+    member sha256), not scanned from disk, whether resolved from the local mirror
+    or the hf:// Hub mirror. Any mismatch in model, input, weight identity, device
+    or existing output requires force=True.
     """
     device = normalize_decoder_device(device)
     weight_source = normalize_weight_source(weight_source)
@@ -1027,7 +1012,7 @@ def run_decoder(
             batch_size=batch_size, token_budget=token_budget, cache_bytes=cache_bytes, precision=precision)
     else:
         model_fingerprint = _model_fingerprint(decoder_dir, python_executable, model,
-            weight_source=weight_source, hf_repo=hf_repo, hf_revision=hf_revision)
+            weight_source=weight_source, hf_repo=hf_repo)
     fingerprint = {
         **model_fingerprint,
         **biology,
@@ -1211,7 +1196,6 @@ def run_decoder_profile(
     mhc_reference: Optional[PathLike] = None,
     weight_source: str = "registry",
     hf_repo: Optional[str] = None,
-    hf_revision: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Get conditional amino-acid marginals using the selected backend.
 
@@ -1247,7 +1231,7 @@ def run_decoder_profile(
             batch_size=batch_size, token_budget=token_budget, cache_bytes=cache_bytes, precision=precision)
     else:
         fingerprint = _model_fingerprint(decoder_dir, python_executable, model,
-            weight_source=weight_source, hf_repo=hf_repo, hf_revision=hf_revision)
+            weight_source=weight_source, hf_repo=hf_repo)
     fingerprint.update(precision=precision, approximate=precision == "float16", **biology)
     with tempfile.TemporaryDirectory(prefix="profile-", dir=output.parent) as temporary:
         candidate = Path(temporary) / "profile.csv"

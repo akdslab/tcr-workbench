@@ -49,11 +49,9 @@ def execute_torch(input_path, candidate, temporary, fingerprint, *, timeout, pro
                "--model-id", spec.model_id, "--device", fingerprint["device"]]
     weight_source = fingerprint.get("weight_source", "registry")
     if weight_source == "huggingface":
-        command += ["--weight-source", "huggingface", "--hf-repo", fingerprint["hf_repo"],
-                    "--hf-weights-sha256", fingerprint["hf_weights_sha256"],
-                    "--hf-revision", fingerprint["hf_revision"]]
-        source = {"kind": "huggingface", "repo": fingerprint["hf_repo"],
-                  "revision": fingerprint["hf_revision"]}
+        command += ["--registry", fingerprint["hf_registry"]]
+        source = {"kind": "huggingface", "registry": fingerprint["hf_registry"],
+                  "model_id": spec.model_id}
     else:
         source = {"kind": "registry", "model_id": spec.model_id}
     if profile:

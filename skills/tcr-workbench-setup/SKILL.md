@@ -16,7 +16,7 @@ description: >-
 
 Goal: get a working local environment that can score TCR–pMHC data, then verify it — with the
 least friction for someone who does not live in a terminal. Setup, not analysis, is where these
-users get stuck; your job is to pick the right options, install `decodertcr_internal`, choose the
+users get stuck; your job is to pick the right options, install `DecoderTCR`, choose the
 weight source, run the launcher commands, and translate any failure into a fix.
 
 ## Scope and prerequisites
@@ -24,7 +24,7 @@ weight source, run the launcher commands, and translate any failure into a fix.
 This skill covers **agent-ready → scoring-ready**. It assumes the user already has:
 
 - a local machine with **Python 3.9+** (the launcher needs 3.9+; setup then provisions its own
-  Python 3.12 in a managed environment — `decodertcr_internal` is Python 3.12 only), and
+  Python 3.12 in a managed environment — `DecoderTCR` is Python 3.12 only), and
 - the TCR-Workbench checkout on disk (from `git clone` or **Code → Download ZIP** on
   `akds/tcr-workbench`), and
 - **a way to obtain the weights** — either **internet access to HuggingFace** (the default; a public
@@ -41,11 +41,12 @@ directly.
 
 Everything runs through the repository launcher: **`python3 tcr.py`**. It creates and owns a
 managed `.tcr/` environment (its own Python 3.12, model runtime, germlines). The model *code* is the
-**`decodertcr_internal`** package (`0.5.0`); the model *weights* come from one of two sources:
+**`DecoderTCR`** package (`1.5.0`); the model *weights* come from one of two sources:
 
-- **HuggingFace (default when no registry is configured).** Setup records the model's published HF
-  repository; `from_pretrained` downloads and verifies the weights on first use (on `load`/`score`).
-  No HPC mount needed — this is the path a laptop or a fresh sandbox uses.
+- **HuggingFace (default when no registry is configured).** Setup records the Hub registry mirror it
+  will use (default `hf://Decoder-CHI/DecoderTCR-staging/registry`); weights are resolved by exact
+  model ID from that mirror and verified against the registry manifest (sha256/size) on first use (on
+  `load`/`score`). No HPC mount needed — this is the path a laptop or a fresh sandbox uses.
 - **Shared registry (internal).** Setup points the package at an existing registry root; weights are
   fetched and verified from it on first use. Use this when the user has registry access and prefers
   it, or on Apple Silicon (see below).
@@ -111,7 +112,6 @@ Set it explicitly only when overriding the default:
 | Force released HuggingFace weights (cpu/gpu) | `--weight-source huggingface` |
 | Force the internal registry | `--weight-source registry --registry /path/to/registry` |
 | Use a non-default / private HF repository | `--weight-source huggingface --hf-repo ORG/REPO` |
-| Pin a specific HF revision | `--hf-revision <commit-or-tag>` |
 
 **HuggingFace authentication:** a public model repo needs none. For a **private or gated** repo,
 export a read token first — `export HF_TOKEN=hf_…` (or run `hf auth login` once). If the token is
@@ -133,15 +133,14 @@ These `esmc-*` names map to the released **`decodertcr@1.5.0`** (300M / 600M / 6
 use the **V2** sequence convention. This is a model upgrade: scores and benchmarks can differ from
 the earlier V0.3 (V1) models. Don't present old numbers as current.
 
-Only `esmc-300m` currently has a published HuggingFace repository; `esmc-600m` / `esmc-6b` are
-registry-only until their repos are published. If the user asks for 600M/6B on the HuggingFace path,
-either supply `--hf-repo` for a repo that has them or use the registry. The ESM2 aliases
-(`esm2-650m` / `esm2-3b`) are **out of scope in this build** — do not offer them. Default is
-`esmc-300m`.
+All three members (300M / 600M / 6B) live in the default staging Hub registry mirror, so any of them
+can use the HuggingFace path (`--weight-source huggingface`). Supply `--hf-repo ORG/REPO` only to
+override the default Hub repository. The ESM2 aliases (`esm2-650m` / `esm2-3b`) are **out of scope in
+this build** — do not offer them. Default is `esmc-300m`.
 
 ## Step 5 — run setup
 
-Setup installs dependencies and `decodertcr_internal==0.5.0` into the managed environment, then
+Setup installs dependencies and `DecoderTCR==1.5.0` into the managed environment, then
 records the weight source. There is no large download during setup — weights arrive on first use.
 
 ```bash
@@ -200,10 +199,10 @@ interpretation.
 - **Where weights live:** the launcher sets `HF_HUB_CACHE` under `.tcr/envs/model/hf-cache`, so
   downloads persist with the project. If the environment is ephemeral (a sandbox that resets),
   keeping `.tcr/` avoids re-downloading; otherwise first scoring re-fetches the weights.
-- **Provenance:** each run records `weight_source`, `hf_repo`, the resolved commit and the weights
-  hash in the output manifest — use these to confirm which weights produced a result.
-- **Pinning:** `--hf-revision` fixes a commit/tag for reproducibility; otherwise the current repo
-  revision is resolved and recorded.
+- **Provenance:** each run records `weight_source`, `hf_repo`, the resolved repo-head commit and the
+  catalog/manifest/artifact sha256 in the output manifest — use these to confirm which weights
+  produced a result. The Hub registry always pins the current repo head commit, so there is no
+  manual revision flag.
 
 ## Registry configuration and access (internal / Apple)
 
@@ -212,7 +211,7 @@ registry is and be able to reach it. `setup --registry <root>` does this; altern
 
 - the env var `DECODERTCR_REGISTRY=/path/to/decodertcr-registry`, or
 - `decodertcr configure --registry /path/to/decodertcr-registry`, or
-- `~/.config/decodertcr/config.json`.
+- `~/.config/decodertcr-public/config.json`.
 
 Then list the inventory to confirm access:
 
@@ -222,7 +221,7 @@ decodertcr models --all    # also archived / blocked releases
 ```
 
 If a release appears only under `--all` as archived or blocked, it is not usable as-is — choose an
-active release (`decodertcr@1.5.0`). `decodertcr_internal==0.5.0` resolves the released
+active release (`decodertcr@1.5.0`). `DecoderTCR==1.5.0` resolves the released
 `decodertcr@1.5.0` checkpoints; if a release needs a newer package, upgrade the package rather than
 editing metadata. Weights are verified when first fetched, so a partial or wrong artifact is
 rejected; scoring runs offline once the artifact is cached locally.
@@ -236,11 +235,11 @@ rejected; scoring runs offline once the artifact is cached locally.
 | "Automatic NVIDIA GPU setup targets Linux" | `--device gpu` off Linux | `--device apple` (Mac) or `--device cpu` |
 | "HuggingFace weights currently run on cpu or gpu only" | `--weight-source huggingface` with `--device apple` | use the registry on Apple, or `--device cpu` |
 | "HuggingFace weights are not reachable … check HF_TOKEN" | no network, wrong repo id, or missing token for a private/gated repo | fix network / repo id; `export HF_TOKEN=hf_…` or `hf auth login` |
-| "model … has no HuggingFace source configured" | HF path for a model without a published repo (600M/6B) | supply `--hf-repo ORG/REPO`, or use the registry |
-| "Model setup requires --registry …" | `--weight-source registry` (or Apple) with no registry configured | pass `--registry <root>` / set `DECODERTCR_REGISTRY`, or use HuggingFace on cpu/gpu |
+| "HuggingFace repository must be OWNER/NAME …" | malformed `--hf-repo` value | pass a valid `OWNER/NAME`, e.g. `--hf-repo some-org/some-repo` |
+| "DecoderTCR registry is not available: No local registry is configured…" | `--weight-source registry` (or Apple) with no registry configured | `decodertcr configure --registry <root>` / set `DECODERTCR_PUBLIC_REGISTRY` / pass `--registry <root>`, or use HuggingFace on cpu/gpu |
 | "Setup stopped … estimated memory exceeds the available budget" | model too big for RAM/VRAM | smaller model or better hardware; `--allow-memory-risk` only with consent |
-| `ModuleNotFoundError: decodertcr_internal` / "decodertcr is not installed" | model package missing from the environment | re-run full `setup` for the device |
-| "decodertcr_internal … is too old; install >= 0.5.0" | HuggingFace path needs `from_pretrained` (0.5.0+) | upgrade the model package |
+| `ModuleNotFoundError: DecoderTCR` / "decodertcr is not installed" | model package missing from the environment | re-run full `setup` for the device |
+| "DecoderTCR <ver> is too old; install >= 1.5.0" | model package below the required version | upgrade the model package |
 | release shows only under `decodertcr models --all` as archived/blocked | that release is not usable as-is | choose an active release (`decodertcr@1.5.0`) |
 | "Setup is needed" / `ModuleNotFoundError` at analysis time | not set up (or core-only, no model) | run `setup` for the device |
 | `doctor` shows no model after `--core-only` | core-only intentionally skips the model runtime | re-run `setup` for the device |

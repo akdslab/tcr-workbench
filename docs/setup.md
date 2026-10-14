@@ -2,7 +2,7 @@
 
 For a first installation, follow the [quickstart](quickstart.md). Run `python3 tcr.py doctor` to check an existing installation. Commands below run from the repository folder.
 
-Setup installs the `decodertcr_internal` model package (Python 3.12) and configures DecoderTCR 300M by default. For 600M or 6B, add `--model esmc-600m` or `--model esmc-6b`. Weights are not downloaded per machine. On CPU/GPU, setup defaults to the released HuggingFace weights when no registry is configured; to use the shared internal registry instead — and always for Apple, which has no HuggingFace path yet — provide it when you run setup:
+Setup installs the `DecoderTCR` model package (Python 3.12) and configures DecoderTCR 300M by default. For 600M or 6B, add `--model esmc-600m` or `--model esmc-6b`. Weights are not downloaded per machine. On CPU/GPU, setup defaults to the released HuggingFace registry mirror when no registry is configured; to use the shared internal registry instead — and always for Apple, which has no HuggingFace path yet — provide it when you run setup:
 
 ```sh
 python3 tcr.py setup --device apple --registry /path/to/decodertcr-registry
@@ -37,7 +37,7 @@ Setup saves defaults in `.tcr/runtime.json`; command flags override them. To sel
 python3 tcr.py --config /path/to/custom.json pmhc-score --panel examples/panel.csv --out results/custom
 ```
 
-If you already have a Python 3.12 environment with `decodertcr_internal` installed, register it:
+If you already have a Python 3.12 environment with `DecoderTCR` installed, register it:
 
 ```sh
 python3 tcr.py configure \
@@ -46,7 +46,7 @@ python3 tcr.py configure \
   --model esmc-300m --device cpu --settings-out custom.json
 ```
 
-Both `--decoder-dir` (the environment root) and `--python` (its interpreter) are required. CPU/CUDA resolve weights by model id, so do not pass `--checkpoint`; the environment uses released HuggingFace weights, or the shared internal registry it was pointed at (`decodertcr configure --registry <root>` or `DECODERTCR_REGISTRY`).
+Both `--decoder-dir` (the environment root) and `--python` (its interpreter) are required. CPU/CUDA resolve weights by model id, so do not pass `--checkpoint`; the environment uses the released HuggingFace registry mirror, or the shared internal registry it was pointed at (`decodertcr configure --registry <root>` or `DECODERTCR_REGISTRY`).
 
 Linux GPU setup requires a working NVIDIA driver and extra disk space for CUDA dependencies. NVIDIA execution is untested. Apple supports 300M and 600M; 6B is experimental and needs substantial memory. See [models and upgrades](upgrading.md) before changing models.
 
@@ -55,10 +55,10 @@ Linux GPU setup requires a working NVIDIA driver and extra disk space for CUDA d
 | Message or symptom | Action |
 |---|---|
 | Environment missing | Run full `setup --device cpu` or `setup --device apple`; use `setup --core-only` for ordinary reference matching only. |
-| `decodertcr_internal` not installed | Rerun full `setup`; it installs `decodertcr_internal==0.5.0`. |
+| `DecoderTCR` not installed | Rerun full `setup`; it installs `DecoderTCR==1.5.0`. |
 | Registry not configured | `decodertcr configure --registry <root>`, or set `DECODERTCR_REGISTRY`. |
 | Weight fetch failed | Check registry access and disk space, then retry; cached artifacts are reused and verified. |
-| Release archived/blocked or needs a newer package | Choose an active release with `decodertcr models --all`, or upgrade `decodertcr_internal`. |
+| Release archived/blocked or needs a newer package | Choose an active release with `decodertcr models --all`, or upgrade `DecoderTCR`. |
 | Setup lock exists | Check that no other setup is running. If it stopped, remove `.tcr/setup.lock` and rerun. |
 | Metal unavailable | Use an Apple Silicon Mac with working Metal access, or set up CPU execution. |
 | Germline download failed | Check access to IMGT and rerun setup for the intended species. |

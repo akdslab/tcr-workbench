@@ -39,7 +39,7 @@ python3 tcr.py setup --device cpu
 python3 tcr.py setup --device gpu
 ```
 
-Setup installs the `decodertcr_internal` model package and configures **DecoderTCR 300M**. It does not download a per-machine checkpoint. On **CPU/GPU**, setup defaults to the released **HuggingFace** weights when no registry is configured, fetched and verified on first use. To use the shared internal **registry** instead — and always for **Apple**, which has no HuggingFace path yet — pass it to setup:
+Setup installs the `DecoderTCR` model package and configures **DecoderTCR 300M**. It does not download a per-machine checkpoint. On **CPU/GPU**, setup defaults to the released **HuggingFace** registry mirror when no registry is configured, fetched and verified on first use. To use the shared internal **registry** instead — and always for **Apple**, which has no HuggingFace path yet — pass it to setup:
 
 ```sh
 python3 tcr.py setup --device apple --registry /path/to/decodertcr-registry

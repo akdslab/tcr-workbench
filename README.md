@@ -77,7 +77,7 @@ This requires working NVIDIA drivers. CUDA dependencies need additional disk spa
 python3 tcr.py setup --device gpu
 ```
 
-Setup installs dependencies, reference sequences and the **`decodertcr_internal`** model package (Python 3.12). It does not download a per-machine checkpoint. On **CPU/GPU**, if no registry is configured, setup defaults to the released **HuggingFace** weights, fetched and verified on first use. To use the shared internal **registry** instead — and always for **Apple**, which has no HuggingFace path yet — provide it when you run setup:
+Setup installs dependencies, reference sequences and the **`DecoderTCR`** model package (Python 3.12). It does not download a per-machine checkpoint. On **CPU/GPU**, if no registry is configured, setup defaults to the released **HuggingFace** registry mirror, fetched and verified on first use. To use the shared internal **registry** instead — and always for **Apple**, which has no HuggingFace path yet — provide it when you run setup:
 
 ```sh
 python3 tcr.py setup --device apple --registry /path/to/decodertcr-registry
@@ -262,7 +262,7 @@ The exact molecule must be in the model's reference. Workbench does not guess mi
 
 ## Models and hardware
 
-Workbench uses **DecoderTCR 300M, 600M and 6B**, fine-tuned from ESM-C, resolved from the shared registry as **`decodertcr@1.0.0`** (V2 sequence convention). The default is **DecoderTCR 300M**. This is a model upgrade from the earlier V0.3 (V1) models; scores and benchmarks can differ. Weights are fetched and verified from the registry on first use rather than downloaded per machine. The ESM2 model variants are not part of this build.
+Workbench uses **DecoderTCR 300M, 600M and 6B**, fine-tuned from ESM-C, resolved from the shared registry as **`decodertcr@1.5.0`** (V2 sequence convention). The default is **DecoderTCR 300M**. This is a model upgrade from the earlier V0.3 (V1) models; scores and benchmarks can differ. Weights are fetched and verified from the registry on first use rather than downloaded per machine. The ESM2 model variants are not part of this build.
 
 | Model | CPU / NVIDIA GPU | Apple Silicon |
 |---|---|---|
@@ -272,7 +272,7 @@ Workbench uses **DecoderTCR 300M, 600M and 6B**, fine-tuned from ESM-C, resolved
 
 NVIDIA execution and 6B inference have not been tested with this tool. Default precision is FP32; our Apple 300M model also offers an optional approximate FP16 mode (`--precision float16`). Use FP16 for faster inference if local hardware resources are limited.
 
-Select DecoderTCR 300M, 600M or 6B with `--model esmc-300m`, `--model esmc-600m` or `--model esmc-6b`. These existing CLI names refer to the fine-tuned DecoderTCR variants, now resolved as `decodertcr@1.0.0` (300M/600M/6B) from the registry. Select hardware independently with `--device cpu`, `--device apple` or `--device gpu`, using the matching installed runtime and weights. The launcher fetches and verifies registry weights on first use, prepares Apple weights when needed, and stops if estimated memory exceeds the available budget.
+Select DecoderTCR 300M, 600M or 6B with `--model esmc-300m`, `--model esmc-600m` or `--model esmc-6b`. These existing CLI names refer to the fine-tuned DecoderTCR variants, now resolved as `decodertcr@1.5.0` (300M/600M/6B) from the registry. Select hardware independently with `--device cpu`, `--device apple` or `--device gpu`, using the matching installed runtime and weights. The launcher fetches and verifies registry weights on first use, prepares Apple weights when needed, and stops if estimated memory exceeds the available budget.
 
 <details>
 <summary>Use a different release or plan a larger run</summary>
@@ -283,7 +283,7 @@ List the releases the registry exposes and select one by model size:
 decodertcr models          # active releases (add --all for archived/blocked)
 ```
 
-The `esmc-300m`/`esmc-600m`/`esmc-6b` names map to the corresponding `decodertcr@1.0.0` sizes. A release that appears only under `--all` as archived or blocked is not usable as-is; a release requiring a newer package than `decodertcr_internal==0.3.1` needs a package upgrade rather than metadata edits.
+The `esmc-300m`/`esmc-600m`/`esmc-6b` names map to the corresponding `decodertcr@1.5.0` sizes. A release that appears only under `--all` as archived or blocked is not usable as-is; a release requiring a newer package than `DecoderTCR==1.5.0` needs a package upgrade rather than metadata edits.
 
 To estimate resources before a large run, use `--plan`:
 
@@ -297,7 +297,7 @@ Preparation checks compatibility and resources before scoring; it does not chang
 
 ## Published DecoderTCR benchmarks
 
-The latest benchmarks are in the [DecoderTCR benchmark README](https://github.com/Biohub/DecoderTCR). The 600M and 6B models typically perform best on most classification tasks. 300M is a useful exploratory tool. The table below reports the earlier **V0.3 (V1)** models; the shipped `decodertcr@1.0.0` **V2** models are a model upgrade and their benchmarks are being re-established. Treat the V2 figures as pending and do not read the V0.3 numbers as current V2 results.
+The latest benchmarks are in the [DecoderTCR benchmark README](https://github.com/Biohub/DecoderTCR). The 600M and 6B models typically perform best on most classification tasks. 300M is a useful exploratory tool. The table below reports the earlier **V0.3 (V1)** models; the shipped `decodertcr@1.5.0` **V2** models are a model upgrade and their benchmarks are being re-established. Treat the V2 figures as pending and do not read the V0.3 numbers as current V2 results.
 
 | Benchmark | Metric | 300M | 600M | 6B |
 |---|---|---:|---:|---:|

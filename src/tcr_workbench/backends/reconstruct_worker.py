@@ -156,10 +156,10 @@ def main():
         return
     if args.mhc_reference or args.mhc_reference_sha256:
         raise ValueError("Human reconstruction uses the pinned human reference")
-    from decodertcr_internal.reconstruct import stitch_tcrs, lookup_hla
-    from decodertcr_internal.reconstruct.hla import _reference
-    from decodertcr_internal.core import ValidationError
-    reference = _reference(args.convention)
+    from DecoderTCR.reconstruct import stitch_tcrs
+    from DecoderTCR.reconstruct.hla import _reference, lookup_hla
+    from DecoderTCR.core import ValidationError
+    reference = _reference(args.convention, "human")
     if args.context_type == "pmhc":
         reconstruct_pmhc(args.input, args.output, reference)
         return
