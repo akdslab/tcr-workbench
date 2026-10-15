@@ -992,9 +992,6 @@ def run_decoder(
     device = normalize_decoder_device(device)
     weight_source = normalize_weight_source(weight_source)
     model = validate_backend(model, device, checkpoint, mlx_python, precision).name
-    if weight_source == "huggingface" and device == "apple":
-        raise ValueError("HuggingFace weights currently run on cpu or cuda only; "
-                         "Apple MLX conversion from HuggingFace is not yet supported")
     from .backends.mlx_decoder import validate_options
     validate_options(batch_size, token_budget, cache_bytes)
     from .species import biological_fingerprint, verify_biological_fingerprint
@@ -1205,9 +1202,6 @@ def run_decoder_profile(
     device = normalize_decoder_device(device)
     weight_source = normalize_weight_source(weight_source)
     model = validate_backend(model, device, checkpoint, mlx_python, precision).name
-    if weight_source == "huggingface" and device == "apple":
-        raise ValueError("HuggingFace weights currently run on cpu or cuda only; "
-                         "Apple MLX conversion from HuggingFace is not yet supported")
     from .backends.mlx_decoder import validate_options
     validate_options(batch_size, token_budget, cache_bytes)
     if not 1 <= length <= 50:

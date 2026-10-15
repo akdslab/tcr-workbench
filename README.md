@@ -77,7 +77,7 @@ This requires working NVIDIA drivers. CUDA dependencies need additional disk spa
 python3 tcr.py setup --device gpu
 ```
 
-Setup installs dependencies, reference sequences and the **`DecoderTCR`** model package (Python 3.12). It does not download a per-machine checkpoint. On **CPU/GPU**, if no registry is configured, setup defaults to the released **HuggingFace** registry mirror, fetched and verified on first use. To use the shared internal **registry** instead — and always for **Apple**, which has no HuggingFace path yet — provide it when you run setup:
+Setup installs dependencies, reference sequences and the **`DecoderTCR`** model package (Python 3.12). It does not download a per-machine checkpoint. If no registry is configured, setup defaults to the released **HuggingFace** registry mirror (CPU, GPU, or Apple), fetched and verified on first use; Apple converts its MLX bundle from the same resolved artifact. To use a local **registry** mirror instead, provide it when you run setup:
 
 ```sh
 python3 tcr.py setup --device apple --registry /path/to/decodertcr-registry

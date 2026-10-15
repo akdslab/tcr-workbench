@@ -75,9 +75,6 @@ def resolve_settings(args):
     options["model"] = resolve_model(options["model"]).name
     options["weight_source"] = normalize_weight_source(options.get("weight_source"))
     if options["weight_source"] == "huggingface":
-        if options["device"] == "apple":
-            raise ValueError("HuggingFace weights currently run on cpu or cuda only; "
-                             "Apple MLX conversion from HuggingFace is not yet supported")
         # Fail closed now if the override cannot form a valid Hub registry spec.
         huggingface_registry(options.get("hf_repo"))
     if options["device"] != "apple" and getattr(args, "mlx_python", None) is None:

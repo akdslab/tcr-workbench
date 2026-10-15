@@ -37,9 +37,12 @@ def test_huggingface_source_resolves_for_every_model():
     assert pinned["hf_repo"] == "me/custom"
 
 
-def test_huggingface_source_rejected_on_apple():
-    with pytest.raises(ValueError, match="cpu or cuda only"):
-        rs.resolve_settings(_args(weight_source="huggingface", device="apple", mlx_python="/mlx/bin/python"))
+def test_huggingface_source_runs_on_apple():
+    # Apple converts its MLX bundle from the hf:// mirror like a local registry mirror,
+    # so the HuggingFace source is accepted on Apple (given the MLX runtime + bundle).
+    options = rs.resolve_settings(_args(weight_source="huggingface", device="apple",
+                                        mlx_python="/mlx/bin/python", checkpoint="/bundle"))
+    assert options["weight_source"] == "huggingface" and options["device"] == "apple"
 
 
 def test_huggingface_source_rejects_a_malformed_repo():

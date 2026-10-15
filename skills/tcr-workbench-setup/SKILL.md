@@ -59,9 +59,9 @@ Facts that shape everything:
   registry resolves) without downloading weights, so you may run it freely.
 - **HuggingFace downloads persist inside `.tcr/`** (the launcher sets `HF_HUB_CACHE` under the model
   environment), so an ephemeral sandbox reuses cached weights instead of re-downloading each session.
-- **Weight source by device:** HuggingFace runs on **cpu/gpu only**. **Apple Silicon (MLX) uses the
-  registry** — HuggingFace conversion for Apple is not yet supported, so an Apple setup needs a
-  registry.
+- **Weight source works on every device.** CPU/GPU load the safetensors directly; Apple Silicon
+  (MLX) converts its bundle from the resolved artifact — a local mirror or the hf:// Hub mirror —
+  and parity-checks it against the CPU reference before use.
 - **Don't move the checkout after setup** — saved paths in `.tcr/` break. Pick a permanent location
   first.
 
@@ -94,7 +94,8 @@ Guardrails the tool enforces (state the fix, don't fight them):
 
 - `--device apple` off Apple Silicon → error; use `--device cpu`.
 - `--device gpu` off Linux → error; on a Mac use `--device apple`.
-- `--weight-source huggingface` with `--device apple` → error; Apple needs the registry.
+- `--weight-source huggingface` works with `--device apple` — the MLX bundle is converted from the
+  Hub mirror artifact (validated byte-for-byte against the CPU reference for 300M).
 
 ## Step 3 — choose the weight source
 
@@ -103,7 +104,8 @@ Most of the time you don't specify this — the default is right:
 - **No registry configured → HuggingFace** (cpu/gpu). This is the laptop / fresh-machine default.
   Setup announces the repo it will use.
 - **A registry is configured (`--registry` or `DECODERTCR_REGISTRY`) → registry.**
-- **Apple Silicon → registry** (HuggingFace isn't supported there yet).
+- **Apple Silicon → HuggingFace when no registry is configured** (same default as CPU/GPU); a
+  configured local registry stays the default. Apple converts its MLX bundle from either source.
 
 Set it explicitly only when overriding the default:
 
@@ -233,10 +235,9 @@ rejected; scoring runs offline once the artifact is cached locally.
 | "The launcher needs Python 3.9 or newer" | system Python too old | install Python 3.9+; setup then provisions 3.12 itself |
 | "Apple setup requires macOS on Apple Silicon (arm64)" | `--device apple` on non-Apple-Silicon | use `--device cpu` |
 | "Automatic NVIDIA GPU setup targets Linux" | `--device gpu` off Linux | `--device apple` (Mac) or `--device cpu` |
-| "HuggingFace weights currently run on cpu or gpu only" | `--weight-source huggingface` with `--device apple` | use the registry on Apple, or `--device cpu` |
 | "HuggingFace weights are not reachable … check HF_TOKEN" | no network, wrong repo id, or missing token for a private/gated repo | fix network / repo id; `export HF_TOKEN=hf_…` or `hf auth login` |
 | "HuggingFace repository must be OWNER/NAME …" | malformed `--hf-repo` value | pass a valid `OWNER/NAME`, e.g. `--hf-repo some-org/some-repo` |
-| "DecoderTCR registry is not available: No local registry is configured…" | `--weight-source registry` (or Apple) with no registry configured | `decodertcr configure --registry <root>` / set `DECODERTCR_PUBLIC_REGISTRY` / pass `--registry <root>`, or use HuggingFace on cpu/gpu |
+| "DecoderTCR registry is not available: No local registry is configured…" | `--weight-source registry` with no registry configured | `decodertcr configure --registry <root>` / set `DECODERTCR_PUBLIC_REGISTRY` / pass `--registry <root>`, or use `--weight-source huggingface` |
 | "Setup stopped … estimated memory exceeds the available budget" | model too big for RAM/VRAM | smaller model or better hardware; `--allow-memory-risk` only with consent |
 | `ModuleNotFoundError: DecoderTCR` / "decodertcr is not installed" | model package missing from the environment | re-run full `setup` for the device |
 | "DecoderTCR <ver> is too old; install >= 1.5.0" | model package below the required version | upgrade the model package |

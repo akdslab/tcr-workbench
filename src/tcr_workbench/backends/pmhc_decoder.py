@@ -121,9 +121,6 @@ def run_pmhc_backend(input_path, output_path, *, decoder_dir, python_executable,
     device = normalize_device(device)
     weight_source = normalize_weight_source(weight_source)
     model = validate_backend(model, device, checkpoint, mlx_python, precision).name
-    if weight_source == "huggingface" and device == "apple":
-        raise ValueError("HuggingFace weights currently run on cpu or cuda only; "
-                         "Apple MLX conversion from HuggingFace is not yet supported")
     mlx_decoder.validate_options(batch_size, token_budget, cache_bytes)
     from ..species import biological_fingerprint, verify_biological_fingerprint
     biology = biological_fingerprint(species, mhc_reference)

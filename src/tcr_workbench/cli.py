@@ -32,7 +32,7 @@ def _decoder_options(command):
     command.add_argument("--timeout", type=float)
     command.add_argument("--weight-source", choices=("registry", "huggingface"),
                          help="Where model weights come from: a configured local registry mirror "
-                         "(default) or the HuggingFace Hub registry mirror (cpu/cuda only)")
+                         "(default) or the HuggingFace Hub registry mirror")
     command.add_argument("--hf-repo", help="HuggingFace OWNER/NAME for --weight-source huggingface "
                          "(default: the published DecoderTCR staging mirror). Set HF_TOKEN for a "
                          "private/gated repo")

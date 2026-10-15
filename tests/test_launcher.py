@@ -376,11 +376,23 @@ def test_huggingface_setup_configures_the_hub_mirror_without_a_local_registry(la
     assert probes and probes[-1]["weight_source"] == "huggingface"
 
 
-def test_huggingface_setup_rejects_apple(launcher,monkeypatch,capsys):
+def test_huggingface_setup_runs_on_apple(launcher,monkeypatch):
+    # Apple now converts its MLX bundle from the hf:// mirror; HF is no longer rejected.
+    # Setup configures the Hub registry mirror and converts the bundle via prepare_setup_model.
     _,bootstrap,root=launcher
-    monkeypatch.setattr(bootstrap,"ensure_uv",lambda *a:pytest.fail("no install before the apple/HuggingFace guard"))
-    assert bootstrap.main(["setup","--device","apple","--weight-source","huggingface"],root=root) == 1
-    assert "huggingface" in capsys.readouterr().err.lower() and not (root/".tcr").exists()
+    monkeypatch.delenv("DECODERTCR_REGISTRY",raising=False)
+    monkeypatch.setattr(bootstrap.platform,"system",lambda:"Darwin")
+    monkeypatch.setattr(bootstrap.platform,"machine",lambda:"arm64")
+    _mock_full_setup(bootstrap,monkeypatch)
+    configured=[]
+    monkeypatch.setattr(bootstrap,"configure_registry",lambda python,reg,env:configured.append(reg))
+    monkeypatch.setattr(bootstrap,"prepare_setup_model",
+                        lambda settings,*a,**k:dict(settings,device="apple",checkpoint="/bundle"))
+    monkeypatch.setattr(bootstrap,"probe",lambda *a,**k:None)
+    assert bootstrap.main(["setup","--device","apple","--weight-source","huggingface"],root=root) == 0
+    assert configured == [bootstrap.hf_registry_spec(None)]
+    saved=json.loads((root/".tcr/runtime-apple.json").read_text())
+    assert saved["weight_source"] == "huggingface"
 
 
 def test_atomic_config_write_keeps_old_config_when_replace_fails(launcher,monkeypatch):

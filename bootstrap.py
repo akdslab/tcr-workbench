@@ -296,20 +296,17 @@ def setup(args, root: Path):
     state = root / ".tcr"
     registry = args.registry or os.environ.get("DECODERTCR_REGISTRY")
     # Resolve the weight source. An explicit --weight-source always wins. Otherwise,
-    # cpu/gpu with no configured registry defaults to released HuggingFace weights so
-    # a machine without registry access can still set up; apple stays on the registry
-    # (HuggingFace conversion for Apple is not yet supported).
+    # any device with no configured registry defaults to the HuggingFace registry
+    # mirror so a machine without local registry access can still set up. Apple
+    # converts its MLX bundle from the resolved artifact (local or hf://) the same way.
     explicit_source = getattr(args, "weight_source", None)
     if explicit_source:
         weight_source = explicit_source
-    elif args.device != "apple" and not registry:
+    elif not registry:
         weight_source = "huggingface"
     else:
         weight_source = "registry"
     auto_hf = weight_source == "huggingface" and not explicit_source
-    if weight_source == "huggingface" and args.device == "apple":
-        raise ValueError("HuggingFace weights currently run on cpu or gpu only; "
-                         "Apple MLX conversion from HuggingFace is not yet supported")
     if args.device == "apple" and (platform.system() != "Darwin" or platform.machine() != "arm64"):
         raise ValueError("Apple setup requires macOS on Apple Silicon (arm64); use --device cpu.")
     if args.device == "gpu" and platform.system() != "Linux":
@@ -427,7 +424,7 @@ def main(argv, *, root: Path) -> int:
     s.add_argument("--registry", help="Local decodertcr registry mirror root; or set DECODERTCR_REGISTRY")
     s.add_argument("--weight-source", choices=("registry", "huggingface"), default=None,
                    help="Where weights come from: 'registry' (a local mirror) or 'huggingface' (the Hub "
-                   "registry mirror, cpu/gpu only; set HF_TOKEN for a private repo). "
+                   "registry mirror; set HF_TOKEN for a private repo). "
                    "Default: registry when a local one is configured, otherwise HuggingFace")
     s.add_argument("--hf-repo", help="HuggingFace OWNER/NAME for --weight-source huggingface "
                    "(default: the published DecoderTCR staging mirror)")

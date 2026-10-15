@@ -2,7 +2,7 @@
 
 For a first installation, follow the [quickstart](quickstart.md). Run `python3 tcr.py doctor` to check an existing installation. Commands below run from the repository folder.
 
-Setup installs the `DecoderTCR` model package (Python 3.12) and configures DecoderTCR 300M by default. For 600M or 6B, add `--model esmc-600m` or `--model esmc-6b`. Weights are not downloaded per machine. On CPU/GPU, setup defaults to the released HuggingFace registry mirror when no registry is configured; to use the shared internal registry instead — and always for Apple, which has no HuggingFace path yet — provide it when you run setup:
+Setup installs the `DecoderTCR` model package (Python 3.12) and configures DecoderTCR 300M by default. For 600M or 6B, add `--model esmc-600m` or `--model esmc-6b`. Weights are not downloaded per machine. If no registry is configured, setup defaults to the released HuggingFace registry mirror (CPU, GPU, or Apple); Apple converts its MLX bundle from the same resolved artifact. To use a local registry mirror instead, provide it when you run setup:
 
 ```sh
 python3 tcr.py setup --device apple --registry /path/to/decodertcr-registry
