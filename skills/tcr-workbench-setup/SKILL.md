@@ -49,7 +49,7 @@ managed `.tcr/` environment (its own Python 3.12, model runtime, germlines). The
   `load`/`score`). No HPC mount needed — this is the path a laptop or a fresh sandbox uses.
 - **Shared registry (internal).** Setup points the package at an existing registry root; weights are
   fetched and verified from it on first use. Use this when the user has registry access and prefers
-  it, or on Apple Silicon (see below).
+  it. Works on every device, including Apple Silicon.
 
 Facts that shape everything:
 
@@ -85,7 +85,7 @@ python3 tcr.py doctor --deep   # also check weight-source reachability and frame
 
 | User's machine | `--device` | Notes |
 |---|---|---|
-| Mac with Apple M-series chip | `apple` | MLX/Metal. Requires macOS on Apple Silicon (arm64). **Registry only.** |
+| Mac with Apple M-series chip | `apple` | MLX/Metal. Requires macOS on Apple Silicon (arm64). HuggingFace or registry. |
 | Linux with a working NVIDIA driver | `gpu` | CUDA. Automatic GPU setup targets Linux only. |
 | Anything else — Intel Mac, Windows, no GPU, unsure | `cpu` | Always works; slower on large models. |
 | Reference matching only, no model needed | `--core-only` | Installs the core; **no** model/framework/germline install. |
@@ -101,7 +101,7 @@ Guardrails the tool enforces (state the fix, don't fight them):
 
 Most of the time you don't specify this — the default is right:
 
-- **No registry configured → HuggingFace** (cpu/gpu). This is the laptop / fresh-machine default.
+- **No registry configured → HuggingFace** (any device). This is the laptop / fresh-machine default.
   Setup announces the repo it will use.
 - **A registry is configured (`--registry` or `DECODERTCR_REGISTRY`) → registry.**
 - **Apple Silicon → HuggingFace when no registry is configured** (same default as CPU/GPU); a
@@ -111,7 +111,7 @@ Set it explicitly only when overriding the default:
 
 | Situation | Flag |
 |---|---|
-| Force released HuggingFace weights (cpu/gpu) | `--weight-source huggingface` |
+| Force the HuggingFace Hub mirror | `--weight-source huggingface` |
 | Force the internal registry | `--weight-source registry --registry /path/to/registry` |
 | Use a non-default / private HF repository | `--weight-source huggingface --hf-repo ORG/REPO` |
 
@@ -156,7 +156,10 @@ python3 tcr.py setup --device cpu --weight-source huggingface
 export HF_TOKEN=hf_xxx
 python3 tcr.py setup --device cpu --weight-source huggingface
 
-# Internal registry instead (also required for Apple Silicon):
+# Apple Silicon, default 300M, weights from HuggingFace:
+python3 tcr.py setup --device apple
+
+# Internal registry instead (any device):
 python3 tcr.py setup --device cpu   --registry /path/to/decodertcr-registry
 python3 tcr.py setup --device apple --registry /path/to/decodertcr-registry
 
@@ -206,9 +209,9 @@ interpretation.
   produced a result. The Hub registry always pins the current repo head commit, so there is no
   manual revision flag.
 
-## Registry configuration and access (internal / Apple)
+## Registry configuration and access (internal)
 
-When using `--weight-source registry` (or on Apple Silicon), the model package must know where the
+When using `--weight-source registry`, the model package must know where the
 registry is and be able to reach it. `setup --registry <root>` does this; alternatives:
 
 - the env var `DECODERTCR_REGISTRY=/path/to/decodertcr-registry`, or
@@ -228,6 +231,45 @@ active release (`decodertcr@1.5.0`). `DecoderTCR==1.5.0` resolves the released
 editing metadata. Weights are verified when first fetched, so a partial or wrong artifact is
 rejected; scoring runs offline once the artifact is cached locally.
 
+## Behind a corporate / TLS-inspecting proxy (e.g. CZ Biohub)
+
+On a network that inspects TLS (Umbrella/OpenDNS + Palo Alto), the first weight fetch from
+HuggingFace can fail even though the network is fine. Exported environment variables **are inherited
+by the launcher and its workers**, so set the fix and re-run. The fetch happens on first `load`/`score`
+(or when preparing an Apple bundle), not at `setup`, so these apply to the first scoring run too:
+
+- **Xet CDN 403 / connection reset on the weights download.** HuggingFace serves large files over its
+  Xet content CDN, which does not survive a TLS-inspecting proxy (and 403s on some private repos
+  regardless). Disable it:
+
+  ```bash
+  export HF_HUB_DISABLE_XET=1
+  ```
+
+  This is the most common fix for the `Decoder-CHI/DecoderTCR-staging` mirror; the download then falls
+  back to a plain HTTPS request.
+
+- **`SSL: CERTIFICATE_VERIFY_FAILED`** — Python's certificate bundle doesn't trust the proxy's MITM
+  root CA (even though `curl` does, via the macOS keychain). Point Python at the system trust store;
+  exported variables reach `huggingface_hub`. On macOS:
+
+  ```bash
+  security find-certificate -a -p /System/Library/Keychains/SystemRootCertificates.keychain >  /tmp/macos-ca-bundle.pem
+  security find-certificate -a -p /Library/Keychains/System.keychain                        >> /tmp/macos-ca-bundle.pem
+
+  SSL_CERT_FILE=/tmp/macos-ca-bundle.pem REQUESTS_CA_BUNDLE=/tmp/macos-ca-bundle.pem \
+  HF_HUB_DISABLE_XET=1 python3 tcr.py setup --device apple
+  ```
+
+- **Download stalls / times out** — if the network uses an explicit proxy, set `HTTPS_PROXY`/
+  `HTTP_PROXY` before running. The same `HF_HUB_DISABLE_XET=1` applies to germline tooling and any
+  other `huggingface_hub` transfer.
+
+Sanity-check the network outside Python first: `hf auth whoami` (confirms token + connectivity) and
+`curl -sSI https://huggingface.co`. If those work but the Python fetch still fails, it's the CA/Xet
+issue above, not connectivity. Only the first fetch needs the network; scoring runs offline once the
+weights are cached under `.tcr/`.
+
 ## Common failures
 
 | Symptom | Cause | Fix |
@@ -236,6 +278,7 @@ rejected; scoring runs offline once the artifact is cached locally.
 | "Apple setup requires macOS on Apple Silicon (arm64)" | `--device apple` on non-Apple-Silicon | use `--device cpu` |
 | "Automatic NVIDIA GPU setup targets Linux" | `--device gpu` off Linux | `--device apple` (Mac) or `--device cpu` |
 | "HuggingFace weights are not reachable … check HF_TOKEN" | no network, wrong repo id, or missing token for a private/gated repo | fix network / repo id; `export HF_TOKEN=hf_…` or `hf auth login` |
+| Weight fetch fails with Xet 403 / `SSL: CERTIFICATE_VERIFY_FAILED` on first scoring | TLS-inspecting proxy / Xet CDN (e.g. CZ Biohub) | `export HF_HUB_DISABLE_XET=1` (+ the CA-bundle fix) — see "Behind a corporate / TLS-inspecting proxy" |
 | "HuggingFace repository must be OWNER/NAME …" | malformed `--hf-repo` value | pass a valid `OWNER/NAME`, e.g. `--hf-repo some-org/some-repo` |
 | "DecoderTCR registry is not available: No local registry is configured…" | `--weight-source registry` with no registry configured | `decodertcr configure --registry <root>` / set `DECODERTCR_PUBLIC_REGISTRY` / pass `--registry <root>`, or use `--weight-source huggingface` |
 | "Setup stopped … estimated memory exceeds the available budget" | model too big for RAM/VRAM | smaller model or better hardware; `--allow-memory-risk` only with consent |
@@ -248,8 +291,8 @@ rejected; scoring runs offline once the artifact is cached locally.
 ## Caveats to hold to
 
 - **Weights are fetched and verified on first use, never at setup; `doctor` only checks
-  reachability.** HuggingFace is the default source (cpu/gpu); the registry is internal and required
-  on Apple Silicon.
+  reachability.** HuggingFace is the default source on every device (including Apple Silicon); the
+  registry is the internal alternative.
 - **Don't switch weight source, model, device or precision silently.** The default (registry if
   configured, else HuggingFace) is announced; state it, and only override on explicit request.
 - **HuggingFace auth:** public repos need none; private/gated need `HF_TOKEN` / `hf auth login` —
