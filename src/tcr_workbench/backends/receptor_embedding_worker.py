@@ -38,7 +38,7 @@ def reconstruct(input_path, output_path, species, stitch=None):
         if species == "mouse":
             from mouse_stitch import stitch_mouse_tcrs as stitch
         else:
-            from DecoderTCR.reconstruct import stitch_tcrs as _stitch_tcrs
+            from decodertcr_internal.reconstruct import stitch_tcrs as _stitch_tcrs
 
             def stitch(rows):
                 # Upstream returns a list aligned to the input; re-key by name.
@@ -157,8 +157,8 @@ def load_encoder(args):
         runtime = {"backend": "mlx", "device": "apple", "tokenizer_variant": tokenizer.variant}
     else:
         import torch
-        from DecoderTCR import load
-        from DecoderTCR.constants import ALPHABET
+        from decodertcr_internal import load
+        from decodertcr_internal.constants import ALPHABET
         device = torch.device(args.device)
         if device.type not in ("cpu", "cuda") or (device.type == "cuda" and (
                 not torch.cuda.is_available() or (device.index is not None and device.index >= torch.cuda.device_count()))):

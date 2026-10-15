@@ -47,13 +47,6 @@ def execute_torch(input_path, candidate, temporary, fingerprint, *, timeout, pro
                "--input", str(reconstructed), "--output", str(candidate), "--runtime", str(runtime_path),
                "--context-type", fingerprint["context_type"], "--model", fingerprint["model"],
                "--model-id", spec.model_id, "--device", fingerprint["device"]]
-    weight_source = fingerprint.get("weight_source", "registry")
-    if weight_source == "huggingface":
-        command += ["--registry", fingerprint["hf_registry"]]
-        source = {"kind": "huggingface", "registry": fingerprint["hf_registry"],
-                  "model_id": spec.model_id}
-    else:
-        source = {"kind": "registry", "model_id": spec.model_id}
     if profile:
         command.append("--profile-batch" if profile == "batch" else "--profile")
     _execute(command, root, timeout)
@@ -64,7 +57,7 @@ def execute_torch(input_path, candidate, temporary, fingerprint, *, timeout, pro
             or runtime["mode"] != ("profiles" if profile == "batch" else "profile" if profile else "scores")
             or runtime["scored"] + runtime["unresolved"] != runtime["rows"]):
         raise ValueError("PyTorch worker returned inconsistent model/device provenance")
-    current = _decoder_fingerprint(root, fingerprint["python_executable"], source=source)
+    current = _decoder_fingerprint(root, fingerprint["python_executable"], model_id=spec.model_id)
     verify_biological_fingerprint(fingerprint)
     if any(fingerprint.get(key) != value for key, value in current.items()):
         raise ValueError("DecoderTCR reconstruction environment changed during inference")

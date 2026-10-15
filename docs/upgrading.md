@@ -34,7 +34,7 @@ decodertcr models          # active releases
 decodertcr models --all    # also archived / blocked releases
 ```
 
-You can instead set `DECODERTCR_REGISTRY` or write `~/.config/decodertcr-public/config.json`. The `esmc-300m`/`esmc-600m`/`esmc-6b` names map to the corresponding `decodertcr@1.5.0` sizes. A release shown only under `--all` as archived or blocked is not usable as-is; a release requiring a newer package than `DecoderTCR==1.5.0` needs a package upgrade, not a metadata edit.
+You can instead set `DECODERTCR_REGISTRY` or write `~/.config/decodertcr/config.json`. The `esmc-300m`/`esmc-600m`/`esmc-6b` names map to the corresponding `decodertcr@1.5.0` sizes. A release shown only under `--all` as archived or blocked is not usable as-is; a release requiring a newer package than `decodertcr_internal==0.5.0` needs a package upgrade, not a metadata edit.
 
 Weights are verified when first fetched from the registry, so a partial or wrong artifact is rejected. Cached artifacts are reused by release identity; existing results keep their original model details.
 
@@ -81,4 +81,4 @@ Here, 1000 means model evaluations for distinct contexts, not individual peptide
 
 New weights must match a supported DecoderTCR architecture. Successful preparation checks that the model can run; it does not establish prediction accuracy. Choose weights trained for the intended species and compare results on representative inputs before adopting a new release.
 
-To use a separately installed `DecoderTCR` environment, provide `--python` for that installation. See [configuration](setup.md#configuration-and-other-models) to save it in a separate settings file. Existing result folders retain the model details from their original run.
+To use a separately installed `decodertcr_internal` environment, provide `--python` for that installation. See [configuration](setup.md#configuration-and-other-models) to save it in a separate settings file. Existing result folders retain the model details from their original run.

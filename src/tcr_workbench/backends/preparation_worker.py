@@ -1,6 +1,6 @@
 """One-time strict registry-artifact inspection and tiny synthetic forward checks.
 
-Weights are resolved from the DecoderTCR registry by exact model ID. The
+Weights are resolved from the decodertcr_internal registry by exact model ID. The
 torch backend loads the released artifact and runs a tiny synthetic forward as the
 Apple parity reference; the mlx backend runs the converted bundle.
 """
@@ -24,17 +24,13 @@ _SAFETENSORS_DTYPE_BYTES = {
 }
 
 
-def _artifact_inventory(model_id, registry_spec=None):
+def _artifact_inventory(model_id):
     """Return tensor/byte inventory and identity from the registry safetensors header."""
-    from DecoderTCR.registry import Registry
+    from decodertcr_internal.registry import Registry
     from safetensors import safe_open
 
-    registry = Registry(registry_spec or None)
-    resolved = registry.resolve(model_id)
-    # verify_artifact resolves and sha256/size-verifies the member weights, returning
-    # the local file path (a cache path for an hf:// mirror); the bundle is no longer a
-    # plain directory, so the resolved descriptor cannot be joined as a path directly.
-    weights = registry.verify_artifact(resolved.bundle, resolved.member["weights"])
+    resolved = Registry(None).resolve(model_id)
+    weights = resolved.bundle / resolved.member["weights"]["path"]
     tensor_count = 0
     parameter_bytes = 0
     with safe_open(str(weights), framework="np") as reader:
@@ -54,11 +50,10 @@ def _artifact_inventory(model_id, registry_spec=None):
 
 def torch_fixture(args):
     import torch
-    from DecoderTCR import load
-    from DecoderTCR.constants import ALPHABET
+    from decodertcr_internal import load
+    from decodertcr_internal.constants import ALPHABET
 
-    tensor_count, parameter_bytes, storage_bytes, backbone, arch = _artifact_inventory(
-        args.model_id, args.registry)
+    tensor_count, parameter_bytes, storage_bytes, backbone, arch = _artifact_inventory(args.model_id)
     if args.inspect_only:
         return {"model": args.model, "tensor_count": tensor_count, "parameter_bytes": parameter_bytes,
                 "checkpoint_storage_bytes": storage_bytes,
@@ -69,7 +64,7 @@ def torch_fixture(args):
             or (device.index or 0) >= torch.cuda.device_count()):
         raise ValueError("Requested CUDA device is unavailable; no CPU fallback")
     started = perf_counter()
-    loaded = load(args.model_id, device=str(device), registry=args.registry or None)
+    loaded = load(args.model_id, device=str(device), registry=None)
     model = loaded.module
     model.eval()
     if any(p.dtype != torch.float32 for p in model.parameters() if p.is_floating_point()):
@@ -107,7 +102,6 @@ def main():
     parser.add_argument("--backend", choices=("torch", "mlx"), required=True)
     parser.add_argument("--checkpoint")
     parser.add_argument("--model-id")
-    parser.add_argument("--registry")
     parser.add_argument("--model", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--device", default="cpu")

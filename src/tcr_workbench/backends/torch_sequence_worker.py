@@ -1,11 +1,9 @@
 """Bounded upstream PyTorch scoring of explicitly reconstructed HLA/TCR sequences.
 
-Weights are resolved by exact model ID through the DecoderTCR package registry
-(a local mirror or an hf://OWNER/REPOSITORY/PREFIX Hub mirror, passed as
-``--registry``; the configured default applies when omitted); an already loaded
-LoadedModel is reused for every row. Context type is explicit and never inferred
-from missing TCR columns: absent chains are passed as empty sequences. Model
-weights are loaded once, only if at least one row can score.
+Weights are resolved from the decodertcr_internal registry by exact model ID; an
+already loaded LoadedModel is reused for every row. Context type is explicit and
+never inferred from missing TCR columns: absent chains are passed as empty
+sequences. Model weights are loaded once, only if at least one row can score.
 """
 from __future__ import annotations
 
@@ -43,13 +41,9 @@ def main():
     args = parser.parse_args()
     if args.profile_batch and args.context_type != "pmhc":
         raise ValueError("Batched profiles require MHC-only context")
-
     import torch
-    from DecoderTCR import load
-    # The prepared-sequence scoring/profile entry points are the package's internal
-    # ones: Workbench reconstructs sequences in its own audited worker and feeds the
-    # finished HLA/TCR/peptide entries, rather than re-reconstructing from genes here.
-    from DecoderTCR.features import _region_profile
+    import decodertcr_internal as dt
+    from decodertcr_internal import load
     if not 0 <= args.cache_size <= 65536:
         raise ValueError("cache-size must be between zero and 65536 entries")
     device = torch.device(args.device)
@@ -66,10 +60,6 @@ def main():
         nonlocal loaded, load_seconds
         if loaded is None:
             started = perf_counter()
-            # Both the local mirror and the hf:// Hub mirror resolve by exact model
-            # ID through the same loader; the registry (local path or hf:// spec, or
-            # the configured default when omitted) verifies the member weights
-            # against the manifest sha256/size before the model is built.
             loaded = load(args.model_id, device=str(device), registry=args.registry or None)
             loaded.module.eval()
             if any(parameter.is_floating_point() and parameter.dtype != torch.float32
@@ -94,8 +84,8 @@ def main():
                 nonlocal inference_seconds
                 model = get_model()
                 started = perf_counter()
-                frame = _region_profile(model, sequence_entry(row, "pmhc"), "peptide",
-                    len(row["peptide"]), prepared=True)
+                frame = dt.peptide_profile(sequence_entry(row, "pmhc"),
+                    len(row["peptide"]), model=model, input_format="prepared")
                 inference_seconds += perf_counter() - started
                 return frame.reset_index().sort_values("position")[list(AA)].to_numpy()
 
@@ -113,8 +103,8 @@ def main():
             else:
                 model = get_model()
                 started = perf_counter()
-                frame = _region_profile(model, sequence_entry(row, args.context_type), "peptide",
-                    len(row["peptide"]), prepared=True)
+                frame = dt.peptide_profile(sequence_entry(row, args.context_type),
+                    len(row["peptide"]), model=model, input_format="prepared")
                 frame.reset_index()[["position"] + list(AA)].to_csv(target, index=False)
                 inference_seconds += perf_counter() - started
                 counts.update(scored=1, status="ModelHypothesis")
@@ -137,8 +127,8 @@ def main():
                 if valid:
                     model = get_model()
                     started = perf_counter()
-                    scored = model._score_prepared([entry for _, entry in valid],
-                                                    mask_region="peptide", cache_size=args.cache_size)
+                    scored = model.score([entry for _, entry in valid], mask_region="peptide",
+                                         input_format="prepared", cache_size=args.cache_size)
                     scores = scored["pll"].tolist()
                     inference_seconds += perf_counter() - started
                     if len(scores) != len(valid):

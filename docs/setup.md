@@ -2,14 +2,14 @@
 
 For a first installation, follow the [quickstart](quickstart.md). Run `python3 tcr.py doctor` to check an existing installation. Commands below run from the repository folder.
 
-Setup installs the `DecoderTCR` model package (Python 3.12) and configures DecoderTCR 300M by default. For 600M or 6B, add `--model esmc-600m` or `--model esmc-6b`. Weights are not downloaded per machine. If no registry is configured, setup defaults to the released HuggingFace registry mirror (CPU, GPU, or Apple); Apple converts its MLX bundle from the same resolved artifact. To use a local registry mirror instead, provide it when you run setup:
+Setup installs the `decodertcr_internal` model package (Python 3.12) and configures DecoderTCR 300M by default. For 600M or 6B, add `--model esmc-600m` or `--model esmc-6b`. Weights are not downloaded per machine; they come from a shared registry and are fetched and verified on first use. Point setup at the registry when you run it — the registry must be reachable beforehand:
 
 ```sh
-python3 tcr.py setup --device apple --registry /path/to/decodertcr-registry
+python3 tcr.py setup --device cpu --registry /path/to/decodertcr-registry
 # or export DECODERTCR_REGISTRY=/path/to/decodertcr-registry before setup
 ```
 
-Setup connects the model package to that registry for you; there is no separate `decodertcr configure` step. List releases with `decodertcr models` (add `--all` for archived/blocked). The first scoring run needs source access; later analyses use the locally cached weights. The `esmc-300m`/`esmc-600m`/`esmc-6b` names map to `decodertcr@1.5.0` (V2 sequence convention), a model upgrade from the earlier V0.3 models. The ESM2 variants are not part of this build.
+Setup connects the model package to that registry for you; there is no separate `decodertcr configure` step. List releases with `decodertcr models` (add `--all` for archived/blocked). Setup and the first scoring run need registry access; later analyses use the locally cached weights. The `esmc-300m`/`esmc-600m`/`esmc-6b` names map to `decodertcr@1.5.0` (V2 sequence convention), a model upgrade from the earlier V0.3 models. The ESM2 variants are not part of this build.
 
 ## Existing installations
 
@@ -37,7 +37,7 @@ Setup saves defaults in `.tcr/runtime.json`; command flags override them. To sel
 python3 tcr.py --config /path/to/custom.json pmhc-score --panel examples/panel.csv --out results/custom
 ```
 
-If you already have a Python 3.12 environment with `DecoderTCR` installed, register it:
+If you already have a Python 3.12 environment with `decodertcr_internal` installed, register it:
 
 ```sh
 python3 tcr.py configure \
@@ -46,7 +46,7 @@ python3 tcr.py configure \
   --model esmc-300m --device cpu --settings-out custom.json
 ```
 
-Both `--decoder-dir` (the environment root) and `--python` (its interpreter) are required. CPU/CUDA resolve weights by model id, so do not pass `--checkpoint`; the environment uses the released HuggingFace registry mirror, or the shared internal registry it was pointed at (`decodertcr configure --registry <root>` or `DECODERTCR_REGISTRY`).
+Both `--decoder-dir` (the environment root) and `--python` (its interpreter) are required. CPU/CUDA resolve weights by model id, so do not pass `--checkpoint`; the environment resolves them from its configured registry (`decodertcr configure --registry <root>` or `DECODERTCR_REGISTRY`).
 
 Linux GPU setup requires a working NVIDIA driver and extra disk space for CUDA dependencies. NVIDIA execution is untested. Apple supports 300M and 600M; 6B is experimental and needs substantial memory. See [models and upgrades](upgrading.md) before changing models.
 
@@ -55,10 +55,10 @@ Linux GPU setup requires a working NVIDIA driver and extra disk space for CUDA d
 | Message or symptom | Action |
 |---|---|
 | Environment missing | Run full `setup --device cpu` or `setup --device apple`; use `setup --core-only` for ordinary reference matching only. |
-| `DecoderTCR` not installed | Rerun full `setup`; it installs `DecoderTCR==1.5.0`. |
+| `decodertcr_internal` not installed | Rerun full `setup`; it installs `decodertcr_internal==0.5.0`. |
 | Registry not configured | `decodertcr configure --registry <root>`, or set `DECODERTCR_REGISTRY`. |
 | Weight fetch failed | Check registry access and disk space, then retry; cached artifacts are reused and verified. |
-| Release archived/blocked or needs a newer package | Choose an active release with `decodertcr models --all`, or upgrade `DecoderTCR`. |
+| Release archived/blocked or needs a newer package | Choose an active release with `decodertcr models --all`, or upgrade `decodertcr_internal`. |
 | Setup lock exists | Check that no other setup is running. If it stopped, remove `.tcr/setup.lock` and rerun. |
 | Metal unavailable | Use an Apple Silicon Mac with working Metal access, or set up CPU execution. |
 | Germline download failed | Check access to IMGT and rerun setup for the intended species. |

@@ -1,6 +1,6 @@
 # Licenses and data sources
 
-Workbench code is [MIT licensed](../LICENSE). Model weights, dependencies and reference data retain their own terms. Weights are provided by the `DecoderTCR` package through a shared registry and fetched on first use; they are not bundled with this repository.
+Workbench code is [MIT licensed](../LICENSE). Model weights, dependencies and reference data retain their own terms. Weights are provided by the `decodertcr_internal` package through a shared registry and fetched on first use; they are not bundled with this repository.
 
 ## DecoderTCR models and Apple support
 
