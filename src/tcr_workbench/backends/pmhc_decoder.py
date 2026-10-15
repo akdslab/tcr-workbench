@@ -10,7 +10,7 @@ import numpy as np
 import polars as pl
 
 from ..hla import parse_hla
-from ..model_registry import normalize_device, validate_backend
+from ..model_registry import normalize_device, normalize_weight_source, validate_backend
 from . import mlx_decoder
 from .torch_decoder import execute_torch
 
@@ -115,9 +115,11 @@ def validate_output(source, output, model, runtime, *, profile=False):
 def run_pmhc_backend(input_path, output_path, *, decoder_dir, python_executable,
                      model="DecoderTCR-ESMC_300M", checkpoint=None, device="cpu", mlx_python=None, precision="float32",
                      batch_size=1, token_budget=4096, cache_bytes=67108864,
-                     timeout=None, force=False, profile=False, species="human", mhc_reference=None):
+                     timeout=None, force=False, profile=False, species="human", mhc_reference=None,
+                     weight_source="registry", hf_repo=None):
     from ..prediction import _model_fingerprint, file_sha256, _json_write, _sidecar
     device = normalize_device(device)
+    weight_source = normalize_weight_source(weight_source)
     model = validate_backend(model, device, checkpoint, mlx_python, precision).name
     mlx_decoder.validate_options(batch_size, token_budget, cache_bytes)
     from ..species import biological_fingerprint, verify_biological_fingerprint
@@ -130,7 +132,8 @@ def run_pmhc_backend(input_path, output_path, *, decoder_dir, python_executable,
         fingerprint = mlx_decoder.fingerprint(decoder_dir, python_executable, model,
             checkpoint, mlx_python, batch_size=batch_size, token_budget=token_budget, cache_bytes=cache_bytes, precision=precision)
     else:
-        fingerprint = _model_fingerprint(decoder_dir, python_executable, model)
+        fingerprint = _model_fingerprint(decoder_dir, python_executable, model,
+            weight_source=weight_source, hf_repo=hf_repo)
         fingerprint.update(backend="torch", device=device, dtype="float32")
     fingerprint.update(**biology, precision=precision, approximate=precision == "float16", schema_version=1, context_type="pmhc", mode="profiles" if profile == "batch" else "profile" if profile else "scores",
                        input_sha256=file_sha256(source),

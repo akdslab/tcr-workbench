@@ -276,12 +276,123 @@ def test_cpu_setup_installs_model_env_and_configures_registry_without_download(l
     assert probes and probes[-1][1] is True
 
 
-def test_full_setup_requires_a_registry(launcher,monkeypatch,capsys):
+def test_explicit_registry_source_requires_a_registry(launcher,monkeypatch,capsys):
+    # Asking explicitly for the registry with none configured is a clear failure,
+    # not a silent switch to another source.
     _,bootstrap,root=launcher
     monkeypatch.delenv("DECODERTCR_REGISTRY",raising=False)
     monkeypatch.setattr(bootstrap,"ensure_uv",lambda *a:pytest.fail("installation before registry validation"))
-    assert bootstrap.main(["setup","--device","cpu"],root=root) == 1
+    assert bootstrap.main(["setup","--device","cpu","--weight-source","registry"],root=root) == 1
     assert "registry" in capsys.readouterr().err.lower() and not (root/".tcr").exists()
+
+
+def _mock_full_setup(bootstrap,monkeypatch):
+    monkeypatch.setattr(bootstrap,"ensure_uv",lambda *a:["uv","--no-config"])
+    monkeypatch.setattr(bootstrap,"run",lambda cmd,**k:None)
+    def install_decoder(uv,env_dir,env,source,device="cpu"):
+        python=bootstrap.python_in(env_dir)
+        python.parent.mkdir(parents=True,exist_ok=True)
+        python.touch()
+        return python
+    monkeypatch.setattr(bootstrap,"install_decoder",install_decoder)
+    monkeypatch.setattr(bootstrap,"ensure_germlines",lambda *a,**k:None)
+    monkeypatch.setattr(bootstrap,"check_setup_resources",lambda *a,**k:None)
+
+
+def test_no_registry_defaults_to_huggingface_on_cpu(launcher,monkeypatch,capsys):
+    # With no registry configured and no explicit source, cpu setup falls back to
+    # the released HuggingFace registry mirror (announced, not silent) rather than
+    # failing, and configures the model package to read that hf:// mirror.
+    _,bootstrap,root=launcher
+    monkeypatch.delenv("DECODERTCR_REGISTRY",raising=False)
+    _mock_full_setup(bootstrap,monkeypatch)
+    configured=[]
+    monkeypatch.setattr(bootstrap,"configure_registry",lambda python,reg,env:configured.append(reg))
+    monkeypatch.setattr(bootstrap,"probe",lambda *a,**k:None)
+    assert bootstrap.main(["setup","--device","cpu"],root=root) == 0
+    assert "huggingface" in capsys.readouterr().out.lower()
+    assert configured == [bootstrap.hf_registry_spec(None)]
+    saved=json.loads((root/".tcr/runtime.json").read_text())
+    assert saved["weight_source"] == "huggingface"
+    assert saved["hf_repo"] is None
+
+
+def test_no_registry_default_targets_every_model(launcher,monkeypatch):
+    # The one published mirror carries every member, so even 600M defaults to it.
+    _,bootstrap,root=launcher
+    monkeypatch.delenv("DECODERTCR_REGISTRY",raising=False)
+    _mock_full_setup(bootstrap,monkeypatch)
+    configured=[]
+    monkeypatch.setattr(bootstrap,"configure_registry",lambda python,reg,env:configured.append(reg))
+    monkeypatch.setattr(bootstrap,"probe",lambda *a,**k:None)
+    assert bootstrap.main(["setup","--device","cpu","--model","esmc-600m"],root=root) == 0
+    assert configured == [bootstrap.hf_registry_spec(None)]
+    saved=json.loads((root/".tcr/runtime.json").read_text())
+    assert saved["weight_source"] == "huggingface" and saved["model"] == "DecoderTCR-ESMC_600M"
+
+
+def test_registry_is_used_when_configured_without_explicit_source(launcher,monkeypatch):
+    # When a local registry is configured, it remains the default (no HuggingFace fallback).
+    _,bootstrap,root=launcher
+    registry=root/"shared registry"
+    registry.mkdir()
+    _mock_full_setup(bootstrap,monkeypatch)
+    configured=[]
+    monkeypatch.setattr(bootstrap,"configure_registry",lambda python,reg,env:configured.append(reg))
+    monkeypatch.setattr(bootstrap,"probe",lambda *a,**k:None)
+    assert bootstrap.main(["setup","--device","cpu","--registry",str(registry)],root=root) == 0
+    assert configured == [str(registry)]
+    saved=json.loads((root/".tcr/runtime.json").read_text())
+    assert saved["weight_source"] == "registry"
+
+
+def test_huggingface_setup_configures_the_hub_mirror_without_a_local_registry(launcher,monkeypatch):
+    # A HuggingFace CPU setup needs no --registry: huggingface_hub ships with the
+    # DecoderTCR package, so it configures the hf:// Hub mirror and saves
+    # weight_source=huggingface settings.
+    _,bootstrap,root=launcher
+    monkeypatch.delenv("DECODERTCR_REGISTRY",raising=False)
+    monkeypatch.setattr(bootstrap,"ensure_uv",lambda *a:["uv","--no-config"])
+    monkeypatch.setattr(bootstrap,"run",lambda cmd,**k:None)
+    def install_decoder(uv,env_dir,env,source,device="cpu"):
+        python=bootstrap.python_in(env_dir)
+        python.parent.mkdir(parents=True,exist_ok=True)
+        python.touch()
+        return python
+    monkeypatch.setattr(bootstrap,"install_decoder",install_decoder)
+    configured=[]
+    monkeypatch.setattr(bootstrap,"configure_registry",lambda python,reg,env:configured.append((Path(python),reg)))
+    monkeypatch.setattr(bootstrap,"ensure_germlines",lambda *a,**k:None)
+    monkeypatch.setattr(bootstrap,"check_setup_resources",lambda *a,**k:None)
+    probes=[]
+    monkeypatch.setattr(bootstrap,"probe",lambda settings,env,**k:probes.append(settings))
+    assert bootstrap.main(["setup","--device","cpu","--weight-source","huggingface"],root=root) == 0
+    model_env=root/".tcr/envs/model"
+    assert configured == [(bootstrap.python_in(model_env), bootstrap.hf_registry_spec(None))]
+    saved=json.loads((root/".tcr/runtime.json").read_text())
+    assert saved["weight_source"] == "huggingface"
+    assert saved["hf_repo"] is None
+    assert saved["checkpoint"] is None and saved["device"] == "cpu"
+    assert probes and probes[-1]["weight_source"] == "huggingface"
+
+
+def test_huggingface_setup_runs_on_apple(launcher,monkeypatch):
+    # Apple now converts its MLX bundle from the hf:// mirror; HF is no longer rejected.
+    # Setup configures the Hub registry mirror and converts the bundle via prepare_setup_model.
+    _,bootstrap,root=launcher
+    monkeypatch.delenv("DECODERTCR_REGISTRY",raising=False)
+    monkeypatch.setattr(bootstrap.platform,"system",lambda:"Darwin")
+    monkeypatch.setattr(bootstrap.platform,"machine",lambda:"arm64")
+    _mock_full_setup(bootstrap,monkeypatch)
+    configured=[]
+    monkeypatch.setattr(bootstrap,"configure_registry",lambda python,reg,env:configured.append(reg))
+    monkeypatch.setattr(bootstrap,"prepare_setup_model",
+                        lambda settings,*a,**k:dict(settings,device="apple",checkpoint="/bundle"))
+    monkeypatch.setattr(bootstrap,"probe",lambda *a,**k:None)
+    assert bootstrap.main(["setup","--device","apple","--weight-source","huggingface"],root=root) == 0
+    assert configured == [bootstrap.hf_registry_spec(None)]
+    saved=json.loads((root/".tcr/runtime-apple.json").read_text())
+    assert saved["weight_source"] == "huggingface"
 
 
 def test_atomic_config_write_keeps_old_config_when_replace_fails(launcher,monkeypatch):
@@ -461,7 +572,7 @@ def test_deep_apple_probe_checks_decoder_bundle_identity(launcher,monkeypatch,mo
 
 def test_deep_cpu_probe_resolves_the_registry_release_identity(launcher,monkeypatch):
     # The CPU/CUDA deep probe confirms the exact registry release resolves via the
-    # decodertcr_internal registry by model ID; no local checkpoint file is inspected.
+    # DecoderTCR registry by model ID; no local checkpoint file is inspected.
     from types import ModuleType
 
     _,bootstrap,_=launcher
@@ -469,14 +580,14 @@ def test_deep_cpu_probe_resolves_the_registry_release_identity(launcher,monkeypa
     torch.__version__="synthetic"
     monkeypatch.setitem(sys.modules,"torch",torch)
     resolved=[]
-    dt=ModuleType("decodertcr_internal")
+    dt=ModuleType("DecoderTCR")
     dt.__version__="synthetic"
-    dt.models=lambda:["release"]
-    dt.info=lambda model_id:(resolved.append(model_id) or {
+    dt.models=lambda *a,**k:["release"]
+    dt.info=lambda model_id,registry=None:(resolved.append(model_id) or {
         "model_id":model_id,
         "member":{"sequence_convention":"esmc","weights":{"sha256":"f"*64}}})
     dt.normalize_gene=lambda gene:gene
-    monkeypatch.setitem(sys.modules,"decodertcr_internal",dt)
+    monkeypatch.setitem(sys.modules,"DecoderTCR",dt)
     def run(command,**kwargs):
         if "info=dt.info" in command[2]:
             monkeypatch.setattr(sys,"argv",["-c",*command[3:]])

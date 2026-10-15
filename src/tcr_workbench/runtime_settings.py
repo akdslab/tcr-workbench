@@ -3,17 +3,18 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from .backends.precision_contract import Precision
-from .model_registry import normalize_device, resolve_model, validate_backend
+from .model_registry import (huggingface_registry, normalize_device, normalize_weight_source,
+                             resolve_model, validate_backend)
 
 DEFAULTS = {"precision": "float32", "model": "DecoderTCR-ESMC_300M", "device": "cpu", "batch_size": 1,
-            "token_budget": 4096, "cache_bytes": 64 * 1024 * 1024}
+            "token_budget": 4096, "cache_bytes": 64 * 1024 * 1024, "weight_source": "registry"}
 KEYS = ("precision", "decoder_dir", "python_executable", "model", "device", "checkpoint", "mlx_python",
-        "batch_size", "token_budget", "cache_bytes", "timeout")
+        "batch_size", "token_budget", "cache_bytes", "timeout", "weight_source", "hf_repo")
 PATHS = {"decoder_dir", "python_executable", "checkpoint", "mlx_python"}
 
 
@@ -39,6 +40,13 @@ class RuntimeSettings(BaseModel):
     token_budget: int = Field(default=4096, ge=3, le=262144)
     cache_bytes: int = Field(default=64 * 1024 * 1024, ge=0, le=1024**3)
     timeout: Optional[float] = Field(default=None, gt=0, allow_inf_nan=False)
+    # Both sources resolve weights by exact model ID through the DecoderTCR package:
+    # "registry" reads the configured local mirror, "huggingface" reads the Hub
+    # registry mirror (hf://OWNER/REPOSITORY/PREFIX). hf_repo overrides the default
+    # Hub repository (OWNER/NAME). A HuggingFace token, when a private repo needs
+    # one, is read from the HF_TOKEN environment variable and never stored here.
+    weight_source: Literal["registry", "huggingface"] = "registry"
+    hf_repo: Optional[str] = None
 
 
 def resolve_settings(args):
@@ -65,11 +73,15 @@ def resolve_settings(args):
     options = RuntimeSettings.model_validate(values).model_dump()
     options["device"] = normalize_device(options["device"])
     options["model"] = resolve_model(options["model"]).name
+    options["weight_source"] = normalize_weight_source(options.get("weight_source"))
+    if options["weight_source"] == "huggingface":
+        # Fail closed now if the override cannot form a valid Hub registry spec.
+        huggingface_registry(options.get("hf_repo"))
     if options["device"] != "apple" and getattr(args, "mlx_python", None) is None:
         options["mlx_python"] = None
     # validate_backend rejects a checkpoint on CPU/CUDA: those devices resolve weights
-    # from the registry by model id, so an Apple bundle or any stale saved checkpoint
-    # must not silently select different weights.
+    # from the registry (or HuggingFace) by model id, so an Apple bundle or any stale
+    # saved checkpoint must not silently select different weights.
     validate_backend(options["model"], options["device"], options["checkpoint"], options["mlx_python"], options["precision"])
     for key, value in options.items():
         setattr(args, key, value)

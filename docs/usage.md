@@ -160,7 +160,7 @@ With embedding matching enabled, both searches restrict reference rows to the re
 
 ## Hardware and saved settings
 
-Commands use saved runtime defaults unless overridden by flags. Select another configuration with `python3 tcr.py --config /path/to/runtime.json ...`. For an existing installation, see `python3 tcr.py configure --help`; supply its `decodertcr_internal` interpreter. Weights are resolved from the shared registry (`decodertcr configure --registry <root>` or `DECODERTCR_REGISTRY`). `--model` and `--device` select model and hardware independently.
+Commands use saved runtime defaults unless overridden by flags. Select another configuration with `python3 tcr.py --config /path/to/runtime.json ...`. For an existing installation, see `python3 tcr.py configure --help`; supply its `DecoderTCR` interpreter. Weights are resolved from the shared registry (`decodertcr configure --registry <root>` or `DECODERTCR_REGISTRY`). `--model` and `--device` select model and hardware independently.
 
 | Device | Supported path | Precision |
 |---|---|---|
