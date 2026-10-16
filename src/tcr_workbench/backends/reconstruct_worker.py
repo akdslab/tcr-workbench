@@ -17,6 +17,47 @@ import re
 GENES = ("trav", "traj", "cdr3a", "trbv", "trbj", "cdr3b")
 RECONSTRUCTION = ("TRAV", "TRAJ", "TRBV", "TRBJ", "HLA_a", "HLA_b", "TCR_a", "TCR_b",
                   "ok", "tcr_ok", "tcr_reason", "hla_ok", "hla_reason")
+RECONSTRUCTION_CONTRACT_VERSION = 2
+
+
+def scoring_chain_adapter(convention, species):
+    """Return the verified DecoderTCR chain preparation for scoring inputs."""
+    if convention == "v1":
+        if species != "human":
+            raise ValueError("V1 reconstruction supports human receptors only")
+        return lambda record: dict(record)
+    if convention != "v2" or species not in ("human", "mouse"):
+        raise ValueError("Unsupported reconstruction convention or species")
+    from DecoderTCR.core import ValidationError
+    from DecoderTCR.reconstruct import components
+    helpers = ((components._strip_leader, components._leaders) if species == "human" else
+               (components._strip_mouse_leader, components._mouse_leaders))
+    if not all(callable(helper) for helper in helpers):
+        raise RuntimeError("Installed DecoderTCR lacks the verified V2 leader adapter")
+    human_leaders = components._leaders() if species == "human" else None
+    mouse_leaders = components._mouse_leaders() if species == "mouse" else None
+
+    def prepare(record):
+        prepared = dict(record)
+        if prepared.get("ok") is not True:
+            return prepared
+        try:
+            if species == "human":
+                prepared["TCR_a"] = components._strip_leader(prepared["TCR_a"], human_leaders)
+                prepared["TCR_b"] = components._strip_leader(prepared["TCR_b"], human_leaders)
+            else:
+                prepared["TCR_a"] = components._strip_mouse_leader(
+                    prepared["TCR_a"], prepared.get("TRA_leader", ""), mouse_leaders
+                )
+                prepared["TCR_b"] = components._strip_mouse_leader(
+                    prepared["TCR_b"], prepared.get("TRB_leader", ""), mouse_leaders
+                )
+        except (KeyError, ValidationError) as exc:
+            prepared["ok"] = False
+            prepared["reason"] = str(exc)
+        return prepared
+
+    return prepare
 
 
 def exact_hla_key(allele):
@@ -79,9 +120,11 @@ def reconstruct_pmhc(input_path, output_path, reference, *, lookup=None):
             writer.writerow(row)
 
 
-def reconstruct(input_path, output_path, *, stitch, lookup, chunk_size=1024, cache_entries=32768):
+def reconstruct(input_path, output_path, *, stitch, lookup, convention="v2", species="human",
+                chunk_size=1024, cache_entries=32768):
     cache = OrderedDict()
     hla_cache = OrderedDict()
+    prepare = scoring_chain_adapter(convention, species)
     with open(input_path, newline="", encoding="utf-8") as source, open(
         output_path, "w", newline="", encoding="utf-8"
     ) as target:
@@ -101,11 +144,12 @@ def reconstruct(input_path, output_path, *, stitch, lookup, chunk_size=1024, cac
             # an existing member needed later in this same chunk.
             current = {key: fresh[key] if key in fresh else cache[key] for key in keys}
             for row, key in zip(chunk, keys):
-                st = current[key]
-                cache[key] = st
+                raw = current[key]
+                cache[key] = raw
                 cache.move_to_end(key)
                 if len(cache) > cache_entries:
                     cache.popitem(last=False)
+                st = prepare(raw)
                 allele = row["hla"]
                 if allele not in hla_cache:
                     try:
@@ -152,7 +196,8 @@ def main():
             reconstruct_pmhc(args.input, args.output, reference, lookup=lookup_mouse)
         else:
             from mouse_stitch import stitch_mouse_tcrs
-            reconstruct(args.input, args.output, stitch=stitch_mouse_tcrs, lookup=lookup_mouse)
+            reconstruct(args.input, args.output, stitch=stitch_mouse_tcrs, lookup=lookup_mouse,
+                        convention=args.convention, species=args.species)
         return
     if args.mhc_reference or args.mhc_reference_sha256:
         raise ValueError("Human reconstruction uses the pinned human reference")
@@ -180,7 +225,8 @@ def main():
             # The cache records unresolved alleles from KeyError; keep that contract.
             raise KeyError(str(exc)) from exc
 
-    reconstruct(args.input, args.output, stitch=stitch, lookup=lookup_molecule)
+    reconstruct(args.input, args.output, stitch=stitch, lookup=lookup_molecule,
+                convention=args.convention, species=args.species)
 
 
 if __name__ == "__main__":

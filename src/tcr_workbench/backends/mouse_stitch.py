@@ -40,6 +40,7 @@ def stitch_mouse_tcrs(rows):
         if missing:
             out[row["name"]] = {"TCR_a": "", "TCR_b": "", "ok": False,
                 "reason": "Mouse V/J gene or allele is absent from the installed reference; no substitution: " + ", ".join(missing),
+                "TRA_leader": "", "TRB_leader": "",
                 **{key.upper(): row[key] for key in GENES}}
         else:
             eligible.append(row)
@@ -81,8 +82,11 @@ def stitch_mouse_tcrs(rows):
                 if warning and warning != "[None]":
                     reason = "; ".join(filter(None, [reason, warning]))
                 selected = {key.upper(): record.get(key.upper()) or row[key] for key in GENES}
-                out[name] = {"TCR_a": alpha, "TCR_b": beta, "ok": ok, "reason": reason, **selected}
+                out[name] = {"TCR_a": alpha, "TCR_b": beta, "ok": ok, "reason": reason,
+                             "TRA_leader": record.get("TRA_leader", ""),
+                             "TRB_leader": record.get("TRB_leader", ""), **selected}
         for row in eligible:
             out.setdefault(row["name"], {"TCR_a": "", "TCR_b": "", "ok": False,
-                "reason": "Mouse receptor dropped by thimble", **{key.upper(): row[key] for key in GENES}})
+                "reason": "Mouse receptor dropped by thimble", "TRA_leader": "", "TRB_leader": "",
+                **{key.upper(): row[key] for key in GENES}})
     return out

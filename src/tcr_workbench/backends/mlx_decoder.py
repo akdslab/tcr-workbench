@@ -131,25 +131,28 @@ print(json.dumps({'origin':spec.origin if spec else None,
 
 
 def fingerprint(decoder_dir, python, model, bundle, mlx_python, *, batch_size, token_budget,
-                cache_bytes, precision="float32"):
-    from ..prediction import _decoder_fingerprint, verify_sequence_convention
-    from ..model_registry import resolve_model
+                cache_bytes, precision="float32", weight_source="registry", hf_repo=None,
+                species="human"):
+    from ..prediction import _model_fingerprint, verify_sequence_convention
     validate_options(batch_size, token_budget, cache_bytes)
     numerical = precision_metadata(precision)
     converted = bundle_fingerprint(bundle)
     # Reuse the authoritative reconstruction/source/environment audit and bind the
     # registry release identity, without loading the converted inference bundle.
-    upstream = _decoder_fingerprint(decoder_dir, python, model_id=resolve_model(model).model_id)
+    upstream = _model_fingerprint(decoder_dir, python, model, weight_source=weight_source,
+                                  hf_repo=hf_repo, species=species)
+    if converted["checkpoint_sha256"] != upstream["artifact_sha256"]:
+        raise ValueError("Converted Apple bundle does not match the selected weight source")
     result = {**upstream, **converted, **runtime_fingerprint(mlx_python, Path(decoder_dir)),
               "model": model, "backend": "mlx", "device": "apple", "batch_size": batch_size,
               "token_budget": token_budget, "cache_bytes": cache_bytes,
-              **numerical, "context_type": "tcr-pmhc"}
+              **numerical, "context_type": "tcr-pmhc", "species": species}
     verify_sequence_convention(result)
     return result
 
 
 def execute(input_path, output_path, temporary, provenance, *, timeout, profile=False):
-    from ..prediction import _execute, _decoder_fingerprint
+    from ..prediction import _execute, _model_fingerprint
     root = Path(provenance["decoder_dir"])
     workers = Path(__file__).resolve().parent
     reconstructed = Path(temporary) / "reconstructed.csv"
@@ -192,8 +195,11 @@ def execute(input_path, output_path, temporary, provenance, *, timeout, profile=
     current = runtime_fingerprint(provenance["mlx_python_executable"], root)
     if any(value != provenance.get(key) for key, value in current.items()):
         raise ValueError("MLX source or Python environment changed during inference")
-    upstream = _decoder_fingerprint(root, provenance["python_executable"],
-                                    model_id=resolve_model(provenance["model"]).model_id)
+    upstream = _model_fingerprint(
+        root, provenance["python_executable"], provenance["model"],
+        weight_source=provenance["weight_source"], hf_repo=provenance.get("hf_repo"),
+        species=provenance["species"],
+    )
     verify_biological_fingerprint(provenance)
     if any(value != provenance.get(key) for key, value in upstream.items()):
         raise ValueError("DecoderTCR reconstruction source, environment or germlines changed during inference")

@@ -60,6 +60,18 @@ def harness(tmp_path, monkeypatch):
     )
     # The migrated _decoder_fingerprint is keyword-aware (model_id=...).
     monkeypatch.setattr(preparation, "_decoder_fingerprint", lambda *a, **k: dict(h.identity))
+    monkeypatch.setattr(preparation, "_reconstruction_fingerprint", lambda *a: {
+        "reconstruction_contract_version": 2,
+        "reconstruction_identity": {"implementation": "test", "reference": "test"},
+    })
+    monkeypatch.setattr(preparation, "_planning_metadata", lambda options, spec: (
+        {
+            "model_id": spec.model_id, "sha256": h.identity["artifact_sha256"],
+            "size_bytes": h.checkpoint_storage_bytes, "backbone": spec.backbone,
+            "architecture": spec.arch, "sequence_convention": spec.convention,
+            "manifest_sha256": "manifest-v1", "catalog_sha256": "catalog-v1",
+        }, preparation._weight_source(options),
+    ))
     monkeypatch.setattr(
         preparation.mlx_decoder, "runtime_fingerprint", lambda *a: dict(mlx_identity)
     )
@@ -114,6 +126,8 @@ def harness(tmp_path, monkeypatch):
         target.mkdir()
         (target / "model.safetensors").write_bytes(b"synthetic converted tensors")
         (target / "config.json").write_text('{"dtype":"float32"}')
+        (target / "tokenizer.json").write_text('{"kind":"test"}')
+        (target / "manifest.json").write_text(json.dumps({"source_sha256": preparation.file_sha256(source)}))
 
     h.fixture = fixture
     monkeypatch.setattr(preparation, "_fixture", fixture)
@@ -121,6 +135,10 @@ def harness(tmp_path, monkeypatch):
     monkeypatch.setattr(
         preparation, "_hardware", lambda options: HardwareMetrics.model_validate(h.hardware)
     )
+    monkeypatch.setattr(
+        preparation, "detect_hardware", lambda device: HardwareMetrics.model_validate(h.hardware)
+    )
+    monkeypatch.setattr(preparation, "_planning_parameter_bytes", lambda model: h.parameter_bytes)
     monkeypatch.setattr(preparation, "_execute", convert)
     return h
 
@@ -150,20 +168,41 @@ def test_identical_checkpoint_runtime_reuses_preparation_without_model_call(harn
     assert len(h.calls) == 1
 
 
-def test_plan_only_inspects_metadata_but_never_runs_fixture_or_publishes(harness):
+def test_plan_only_reads_metadata_but_never_scans_weights_cache_or_publishes(harness, monkeypatch):
     h = harness
+    monkeypatch.setattr(preparation, "_identity", lambda options: pytest.fail("runtime identity inspected"))
+    monkeypatch.setattr(preparation, "_cached", lambda *args: pytest.fail("preparation cache inspected"))
+    monkeypatch.setattr(preparation, "_inspect", lambda *args: pytest.fail("weight inventory inspected"))
     effective, result = prepare(h, plan_only=True, estimate_forwards=100)
     assert effective["checkpoint"] is None
     assert result["plan_only"] and not result["prepared"] and not result["cache_hit"]
-    assert result["inventory"]["parameter_bytes"] == h.parameter_bytes
-    assert result["inventory"]["checkpoint_storage_bytes"] == h.checkpoint_storage_bytes
-    assert not result["inventory"]["finite_values_checked"]
-    assert not result["inventory"]["forward_checked"]
+    assert result["artifact_metadata"]["size_bytes"] == h.checkpoint_storage_bytes
+    assert result["estimates"]["status"] == "UNVALIDATED_METADATA_ESTIMATE"
+    assert "No weight file" in result["estimates"]["limitations"]
     assert result["time_estimate"]["status"] == "unavailable"
-    assert h.inspections == [h.identity["model_id"]] and not h.calls
+    assert not h.inspections and not h.calls
     assert set(result["resources"]) == {"preparation", "inference"}
     assert_unpublished(h)
-    assert not list(h.state.iterdir())
+    assert not h.state.exists()
+
+
+@pytest.mark.parametrize("model", ["esmc-300m", "esmc-6b"])
+def test_plan_only_ignores_cold_cached_and_corrupt_preparation_state(harness, monkeypatch, model):
+    h = harness
+    h.options["model"] = model
+    h.state.mkdir()
+    corrupt = h.state / "corrupt-cache"
+    corrupt.mkdir()
+    (corrupt / "prepared.json").write_text("not json")
+    before = {path.relative_to(h.state): path.read_bytes() for path in h.state.rglob("*") if path.is_file()}
+    monkeypatch.setattr(preparation, "_identity", lambda options: pytest.fail("runtime identity inspected"))
+    monkeypatch.setattr(preparation, "_cached", lambda *args: pytest.fail("preparation cache inspected"))
+    monkeypatch.setattr(preparation, "_inspect", lambda *args: pytest.fail("weight inventory inspected"))
+    _, result = prepare(h, plan_only=True)
+    after = {path.relative_to(h.state): path.read_bytes() for path in h.state.rglob("*") if path.is_file()}
+    assert result["artifact_metadata"]["model_id"].endswith("6B" if model == "esmc-6b" else "300M")
+    assert result["estimates"]["status"] == "UNVALIDATED_METADATA_ESTIMATE"
+    assert before == after and not h.calls and not h.inspections
 
 
 def test_memory_over_budget_stops_before_allocating_model_and_plan_remains_available(harness):
@@ -185,10 +224,10 @@ def test_cached_preparation_rechecks_current_memory_without_rerunning_model(harn
     with pytest.raises(ValueError, match="Memory check stopped inference"):
         prepare(h)
     _, planning = prepare(h, plan_only=True, estimate_forwards=8, sequence_length=8)
-    assert planning["cache_hit"] and planning["plan_only"]
+    assert not planning["cache_hit"] and planning["plan_only"]
     assert planning["resources"]["inference"]["blocked"]
-    assert planning["time_estimate"]["status"] == "rough_extrapolation"
-    assert set(planning["resources"]) == {"inference"}
+    assert planning["time_estimate"]["status"] == "unavailable"
+    assert set(planning["resources"]) == {"preparation", "inference"}
     assert h.inspections == [h.identity["model_id"]] and len(h.calls) == 1
     assert Path(first["record"]).read_bytes() == old_card
 

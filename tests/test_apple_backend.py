@@ -165,7 +165,7 @@ def test_reconstruction_deduplicates_tcr_across_hla_and_peptides_and_retains_ids
             raise KeyError("unknown HLA")
         return "FG", "HI"
 
-    reconstruct(source, target, stitch=stitch, lookup=lookup, chunk_size=2)
+    reconstruct(source, target, stitch=stitch, lookup=lookup, convention="v1", chunk_size=2)
     with target.open() as handle:
         result = list(csv.DictReader(handle))
     assert [r["name"] for r in result] == ["0001", "0002", "0003"]
@@ -173,6 +173,66 @@ def test_reconstruction_deduplicates_tcr_across_hla_and_peptides_and_retains_ids
     assert alleles == ["known", "unknown"]
     assert result[1]["ok"] == "False" and "unknown HLA" in result[1]["hla_reason"]
     assert result[0]["TRAV"] == "TRAV1*01"
+
+
+def test_v2_reconstruction_matches_public_component_oracle_and_token_boundaries(tmp_path):
+    pytest.importorskip("DecoderTCR")
+    from DecoderTCR.reconstruct import stitch_tcrs
+    from DecoderTCR.reconstruct.components import reconstruct_components
+    from DecoderTCR.reconstruct.hla import lookup_hla
+
+    genes = dict(name="V01", trav="TRAV12-1", traj="TRAJ41", cdr3a="CVVNPSNSNSGYALNF",
+                 trbv="TRBV19", trbj="TRBJ2-7", cdr3b="CASSIRASHEQYF",
+                 hla="HLA-A*02:01", peptide="GILGFVFTL", label="1")
+    source, target = tmp_path / "input.csv", tmp_path / "output.csv"
+    pl.DataFrame([genes]).write_csv(source)
+    raw = stitch_tcrs([genes])[0]
+
+    def stitch(rows):
+        return {row["name"]: value for row, value in zip(rows, stitch_tcrs(rows))}
+
+    reconstruct(source, target, stitch=stitch, lookup=lambda allele: lookup_hla(allele, "v2"),
+                convention="v2", species="human")
+    observed = pl.read_csv(target, infer_schema=False).row(0, named=True)
+    expected = reconstruct_components([genes], "v2").iloc[0].to_dict()
+    assert (len(raw["TCR_a"]), len(raw["TCR_b"])) == (275, 310)
+    assert (len(observed["TCR_a"]), len(observed["TCR_b"])) == (254, 291)
+    assert [observed[key] for key in ("TCR_a", "TCR_b", "HLA_a", "HLA_b")] == [
+        expected[key] for key in ("TCR_a", "TCR_b", "HLA_a", "HLA_b")
+    ]
+    key = w.context_key(observed)
+    tokens, positions = w.masked_tokens(key, Tokenizer(), 2048)
+    start = 1 + len(observed["HLA_a"]) + len(observed["HLA_b"])
+    assert positions.tolist() == list(range(start, start + len(genes["peptide"])))
+    assert len(tokens) == sum(len(part) for part in key[:4]) + len(genes["peptide"]) + 2
+
+
+def test_v2_reconstruction_preserves_order_cache_and_audits_unmatched_leader(tmp_path):
+    pytest.importorskip("DecoderTCR")
+    from DecoderTCR.reconstruct.components import _leaders
+
+    source, target = tmp_path / "input.csv", tmp_path / "output.csv"
+    base = dict(trav="TRAV1", traj="TRAJ1", cdr3a="CAF", trbv="TRBV1", trbj="TRBJ1", cdr3b="CFW",
+                hla="known", peptide="AC")
+    rows = [dict(base, name="first"), dict(base, name="repeat"),
+            dict(base | {"trav": "TRAV2"}, name="bad")]
+    pl.DataFrame(rows).write_csv(source)
+    leader = _leaders()[0]
+    calls = []
+
+    def stitch(batch):
+        calls.append(batch)
+        return {row["name"]: dict(TCR_a=("AC" if row["trav"] == "TRAV2" else leader + "AC"),
+                                  TCR_b=leader + "DE", ok=True, reason="") for row in batch}
+
+    reconstruct(source, target, stitch=stitch, lookup=lambda allele: ("FG", "HI"),
+                convention="v2", species="human")
+    output = pl.read_csv(target, infer_schema=False)
+    assert output["name"].to_list() == ["first", "repeat", "bad"]
+    assert output["TCR_a"].to_list()[:2] == ["AC", "AC"]
+    assert output["ok"].to_list() == ["True", "True", "False"]
+    assert "No IMGT leader" in output["tcr_reason"][2]
+    assert len(calls) == 1 and len(calls[0]) == 2
 
 
 def test_bundle_fingerprint_changes_with_content_not_only_stats(tmp_path):
@@ -184,6 +244,36 @@ def test_bundle_fingerprint_changes_with_content_not_only_stats(tmp_path):
     after = host.bundle_fingerprint(tmp_path)
     assert before["bundle_sha256"] != after["bundle_sha256"]
     assert before["checkpoint_sha256"] == "a" * 64
+
+
+def test_apple_fingerprint_binds_selected_source_and_rejects_stale_bundle(tmp_path, monkeypatch):
+    monkeypatch.setattr(host, "bundle_fingerprint", lambda bundle: {
+        "bundle_path": str(bundle), "bundle_sha256": "bundle", "bundle_files": {},
+        "checkpoint_sha256": "a" * 64,
+    })
+    monkeypatch.setattr(host, "runtime_fingerprint", lambda *args: {"mlx_source_sha256": "runtime"})
+    seen = []
+
+    def upstream(*args, **kwargs):
+        seen.append(kwargs)
+        return {"artifact_sha256": "a" * 64, "model_sequence_convention": "v2"}
+
+    monkeypatch.setattr(p, "_model_fingerprint", upstream)
+    first = host.fingerprint(tmp_path, "python", p.DEFAULT_MODEL, tmp_path / "bundle", "mlx",
+        batch_size=1, token_budget=4096, cache_bytes=0, weight_source="registry")
+    second = host.fingerprint(tmp_path, "python", p.DEFAULT_MODEL, tmp_path / "bundle", "mlx",
+        batch_size=1, token_budget=4096, cache_bytes=0, weight_source="huggingface", hf_repo="org/repo")
+    assert first["artifact_sha256"] == second["artifact_sha256"]
+    assert seen == [
+        {"weight_source": "registry", "hf_repo": None, "species": "human"},
+        {"weight_source": "huggingface", "hf_repo": "org/repo", "species": "human"},
+    ]
+    monkeypatch.setattr(p, "_model_fingerprint", lambda *args, **kwargs: {
+        "artifact_sha256": "b" * 64, "model_sequence_convention": "v2"
+    })
+    with pytest.raises(ValueError, match="selected weight source"):
+        host.fingerprint(tmp_path, "python", p.DEFAULT_MODEL, tmp_path / "bundle", "mlx",
+            batch_size=1, token_budget=4096, cache_bytes=0)
 
 
 @pytest.mark.parametrize("options", [(0, 4096, 0), (True, 4096, 0), (1, 2, 0), (1, 4096, -1)])

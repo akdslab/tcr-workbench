@@ -48,7 +48,7 @@ python3 tcr.py setup --device apple --registry /path/to/decodertcr-registry
 
 Setup connects the model package to that registry for you; there is no separate `decodertcr configure` step. List releases with `decodertcr models` (add `--all` for archived/blocked). Allow disk space for the fetched weights, plus Apple conversion and caches. Your device choice is saved for later commands. Moving the folder afterward requires setting up its environments again.
 
-For mouse experiments, add `--species mouse` to setup and each analysis. NVIDIA execution and Windows setup are untested; on Windows, use WSL/Linux.
+For mouse experiments, add `--species mouse` to setup and each analysis. NVIDIA validation is model and workflow specific. The 600M and 6B NVIDIA paths and Windows setup are untested. On Windows, use WSL/Linux.
 
 ### Optional: try reference matching without downloading a model
 

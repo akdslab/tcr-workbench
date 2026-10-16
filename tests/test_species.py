@@ -91,6 +91,62 @@ def test_bundled_mouse_reference_has_exact_classI_and_classII_chains():
     verify_biological_fingerprint(fingerprint)
 
 
+def test_mouse_v2_scoring_adapter_uses_reported_leader_alleles():
+    pytest.importorskip("DecoderTCR")
+    from DecoderTCR.reconstruct.components import _mouse_leaders
+    from tcr_workbench.backends.reconstruct_worker import scoring_chain_adapter
+
+    leaders = _mouse_leaders()
+    gene, leader = next(iter(leaders.items()))
+    prepared = scoring_chain_adapter("v2", "mouse")({
+        "TCR_a": leader + "AC", "TCR_b": leader + "DE", "ok": True, "reason": "",
+        "TRA_leader": gene + "(L)", "TRB_leader": gene,
+    })
+    assert prepared["ok"] and prepared["TCR_a"] == "AC" and prepared["TCR_b"] == "DE"
+    rejected = scoring_chain_adapter("v2", "mouse")({
+        "TCR_a": leader + "AC", "TCR_b": leader + "DE", "ok": True, "reason": "",
+        "TRA_leader": "missing*01(L)", "TRB_leader": gene,
+    })
+    assert not rejected["ok"] and "No verified mouse leader" in rejected["reason"]
+
+
+def test_real_mouse_v2_reconstruction_matches_public_tcr_and_custom_mhc(tmp_path):
+    pytest.importorskip("DecoderTCR")
+    from Stitchr import stitchrfunctions as sf
+    required = [Path(sf.data_dir) / "MOUSE" / name for name in
+                ("TRA.fasta", "TRB.fasta", "J-region-motifs.tsv", "C-region-motifs.tsv")]
+    if not all(path.is_file() for path in required):
+        pytest.skip("requires configured mouse Stitchr germlines")
+    from DecoderTCR.reconstruct.components import prepare_gene_inputs
+    from tcr_workbench.backends.mouse_stitch import stitch_mouse_tcrs
+    from tcr_workbench.backends.reconstruct_worker import reconstruct
+
+    genes = dict(trav="TRAV14-1", traj="TRAJ33", cdr3a="CAASDNYQLIW",
+                 trbv="TRBV12-1", trbj="TRBJ2-7", cdr3b="CASSRANYEQYF",
+                 peptide="ANYKFTLV")
+    source, target = tmp_path / "input.csv", tmp_path / "output.csv"
+    rows = [dict(genes, name="class-I", hla="H-2-Kb"),
+            dict(genes, name="class-II", hla="H-2-IAb")]
+    pl.DataFrame(rows).write_csv(source)
+    reference = load_reference(biological_fingerprint("mouse")["mhc_reference_path"])["molecules"]
+    raw = stitch_mouse_tcrs([dict(genes, name="mouse-golden")])["mouse-golden"]
+    assert raw["TRA_leader"] == "TRAV14-1*01(L)"
+    assert raw["TRB_leader"] == "TRBV12-1*01(L)"
+
+    reconstruct(source, target, stitch=stitch_mouse_tcrs,
+                lookup=lambda allele: (reference[allele]["HLA_a"], reference[allele]["HLA_b"]),
+                convention="v2", species="mouse")
+    output = pl.read_csv(target, infer_schema=False)
+    public_row = dict(genes, name="mouse-golden", hla="H2-Kb")
+    _, entries = prepare_gene_inputs([public_row], "v2", species="mouse")
+    assert entries[0] is not None
+    assert output["TCR_a"].to_list() == [entries[0]["sequences"]["TCR_a"]] * 2
+    assert output["TCR_b"].to_list() == [entries[0]["sequences"]["TCR_b"]] * 2
+    for index, allele in enumerate(("H-2-Kb", "H-2-IAb")):
+        assert output["HLA_a"][index] == reference[allele]["HLA_a"]
+        assert output["HLA_b"][index] == reference[allele]["HLA_b"]
+
+
 @pytest.mark.parametrize("change", ["missing_chain", "invalid_amino_acid", "wrong_species", "wrong_class", "unknown_key", "empty_source"])
 def test_user_reference_is_strict(tmp_path, change):
     reference = load_reference(biological_fingerprint("mouse")["mhc_reference_path"])

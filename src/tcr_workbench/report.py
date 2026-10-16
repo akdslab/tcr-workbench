@@ -1,6 +1,7 @@
 """Atomic, auditable run bundles with bounded HTML previews."""
 from __future__ import annotations
 
+import errno
 import hashlib
 import html
 import importlib.metadata
@@ -8,8 +9,10 @@ import json
 import math
 import os
 import platform
+import shutil
 import stat
 import tempfile
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -77,6 +80,24 @@ def manifest(inputs: dict[str, Path], parameters: dict[str, Any], *,
 
 
 @contextmanager
+def temporary_directory(*, prefix: str, directory: Path | None = None) -> Iterator[Path]:
+    staging = Path(tempfile.mkdtemp(prefix=prefix, dir=directory))
+    try:
+        yield staging
+    finally:
+        for attempt in range(3):
+            if not staging.exists():
+                break
+            try:
+                shutil.rmtree(staging)
+                break
+            except OSError as exc:
+                if exc.errno != errno.ENOTEMPTY or attempt == 2:
+                    raise
+                time.sleep(0.01)
+
+
+@contextmanager
 def output_bundle(destination: Path, *,
                   input_snapshot: dict[str, dict[str, Any]] | None = None) -> Iterator[Path]:
     """Publish only completed bundles; never clobber an existing analysis."""
@@ -84,8 +105,7 @@ def output_bundle(destination: Path, *,
     if destination.exists():
         raise ValueError(f"Output already exists: {destination}. Choose a new --out directory.")
     destination.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix=f".{destination.name}-", dir=destination.parent) as tmp:
-        staging = Path(tmp)
+    with temporary_directory(prefix=f".{destination.name}-", directory=destination.parent) as staging:
         yield staging
         if input_snapshot:
             verify_input_snapshot(input_snapshot)

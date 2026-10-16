@@ -166,7 +166,7 @@ def load_encoder(args):
         torch.set_float32_matmul_precision("highest")
         torch.backends.cuda.matmul.allow_tf32 = False
         torch.backends.cudnn.allow_tf32 = False
-        loaded = load(args.model_id, device=str(device), registry=None)
+        loaded = load(args.model_id, device=str(device), registry=args.registry)
         if loaded.artifact_sha256 != args.checkpoint_sha256:
             raise ValueError("Embedding model artifact identity changed")
         loaded.module.eval()
@@ -291,6 +291,7 @@ def main():
         parser.add_argument("--" + name, required=True)
     parser.add_argument("--model", choices=tuple(WIDTHS))
     parser.add_argument("--model-id")
+    parser.add_argument("--registry")
     parser.add_argument("--device")
     parser.add_argument("--checkpoint")
     parser.add_argument("--checkpoint-sha256")

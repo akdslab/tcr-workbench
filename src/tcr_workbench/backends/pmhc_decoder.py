@@ -130,10 +130,12 @@ def run_pmhc_backend(input_path, output_path, *, decoder_dir, python_executable,
         raise ValueError("input and output paths must differ")
     if device == "apple":
         fingerprint = mlx_decoder.fingerprint(decoder_dir, python_executable, model,
-            checkpoint, mlx_python, batch_size=batch_size, token_budget=token_budget, cache_bytes=cache_bytes, precision=precision)
+            checkpoint, mlx_python, batch_size=batch_size, token_budget=token_budget,
+            cache_bytes=cache_bytes, precision=precision, weight_source=weight_source,
+            hf_repo=hf_repo, species=species)
     else:
         fingerprint = _model_fingerprint(decoder_dir, python_executable, model,
-            weight_source=weight_source, hf_repo=hf_repo)
+            weight_source=weight_source, hf_repo=hf_repo, species=species)
         fingerprint.update(backend="torch", device=device, dtype="float32")
     fingerprint.update(**biology, precision=precision, approximate=precision == "float16", schema_version=1, context_type="pmhc", mode="profiles" if profile == "batch" else "profile" if profile else "scores",
                        input_sha256=file_sha256(source),

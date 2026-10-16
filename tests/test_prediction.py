@@ -632,6 +632,7 @@ def test_weight_source_descriptor_selects_source_without_cross_fallback():
     assert registry == {"kind": "registry", "model_id": "decodertcr@1.5.0:300M"}
     hf = p.weight_source_descriptor("esmc-300m", "huggingface")
     assert hf["kind"] == "huggingface" and hf["model_id"] == "decodertcr@1.5.0:300M"
+    assert hf["repo"] == "Decoder-CHI/DecoderTCR-staging"
     assert hf["registry"] == "hf://Decoder-CHI/DecoderTCR-staging/registry"
     override = p.weight_source_descriptor("esmc-300m", "huggingface", hf_repo="me/custom")
     assert override["registry"] == "hf://me/custom/registry"
@@ -644,6 +645,9 @@ def test_weight_source_descriptor_selects_source_without_cross_fallback():
 
 def test_model_fingerprint_records_weight_source(monkeypatch):
     monkeypatch.setattr(p, "_environment_fingerprint", lambda python, root, source=None: {"src": source})
+    monkeypatch.setattr(p, "_reconstruction_fingerprint", lambda *a: {
+        "reconstruction_contract_version": 2, "reconstruction_identity": {"test": True}
+    })
     registry = p._model_fingerprint("/decoder", sys.executable, "esmc-300m")
     assert registry["weight_source"] == "registry" and registry["src"]["kind"] == "registry"
     assert "hf_registry" not in registry
@@ -652,6 +656,7 @@ def test_model_fingerprint_records_weight_source(monkeypatch):
     assert hf["src"]["registry"] == "hf://Decoder-CHI/DecoderTCR-staging/registry"
     # The resolved hf:// registry spec is threaded for the worker --registry argument.
     assert hf["hf_registry"] == "hf://Decoder-CHI/DecoderTCR-staging/registry"
+    assert hf["hf_repo"] == "Decoder-CHI/DecoderTCR-staging"
 
 
 def _hf_metadata(tmp_path):

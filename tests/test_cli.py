@@ -1,7 +1,10 @@
+import errno
 import html
 import json
+import shutil
 
 import polars as pl
+import pytest
 
 from tcr_workbench.cli import main
 from tcr_workbench.report import output_bundle, sha256_file
@@ -40,6 +43,40 @@ def test_atomic_failure_removes_partial_directory(tmp_path):
         pass
     assert not output.exists()
     assert not list(tmp_path.iterdir())
+
+
+def test_atomic_cleanup_retries_transient_nonempty(tmp_path, monkeypatch):
+    original = shutil.rmtree
+    attempts = []
+
+    def transient(path):
+        attempts.append(path)
+        if len(attempts) == 1:
+            raise OSError(errno.ENOTEMPTY, "transient directory visibility")
+        original(path)
+
+    monkeypatch.setattr("tcr_workbench.report.shutil.rmtree", transient)
+    with pytest.raises(ValueError, match="test failure"):
+        with output_bundle(tmp_path / "failed") as staging:
+            (staging / "partial.txt").write_text("partial")
+            raise ValueError("test failure")
+    assert len(attempts) == 2
+    assert not list(tmp_path.iterdir())
+
+
+def test_atomic_cleanup_reports_persistent_nonempty(tmp_path, monkeypatch):
+    output = tmp_path / "failed"
+
+    def persistent(path):
+        raise OSError(errno.ENOTEMPTY, "persistent directory visibility")
+
+    monkeypatch.setattr("tcr_workbench.report.shutil.rmtree", persistent)
+    with pytest.raises(OSError, match="persistent directory visibility") as caught:
+        with output_bundle(output) as staging:
+            (staging / "partial.txt").write_text("partial")
+            raise ValueError("test failure")
+    assert isinstance(caught.value.__context__, ValueError)
+    assert not output.exists()
 
 
 def test_report_escapes_reference_text(tmp_path):

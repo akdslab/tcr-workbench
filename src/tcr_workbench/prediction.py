@@ -24,8 +24,8 @@ import numpy as np
 import polars as pl
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 
-from .model_registry import (huggingface_registry, normalize_device, normalize_weight_source,
-                            resolve_model, validate_backend)
+from .model_registry import (DEFAULT_HF_REPO, huggingface_registry, normalize_device,
+                             normalize_weight_source, resolve_model, validate_backend)
 
 PathLike = Union[str, Path]
 AA = "ACDEFGHIKLMNPQRSTVWY"
@@ -678,21 +678,58 @@ def weight_source_descriptor(
     weight_source = normalize_weight_source(weight_source)
     model_id = resolve_model(model).model_id
     if weight_source == "huggingface":
-        return {"kind": "huggingface", "registry": huggingface_registry(hf_repo),
+        repo = hf_repo or DEFAULT_HF_REPO
+        return {"kind": "huggingface", "registry": huggingface_registry(repo), "repo": repo,
                 "model_id": model_id}
     return {"kind": "registry", "model_id": model_id}
 
 
+def _reconstruction_fingerprint(
+    decoder_dir: PathLike, python_executable: PathLike, convention: str, species: str,
+) -> Dict[str, Any]:
+    """Bind scoring reconstruction to verified installed references and code."""
+    root = Path(decoder_dir).resolve()
+    python = Path(python_executable).absolute()
+    script = """
+import json
+import sys
+from DecoderTCR import implementation_info
+from DecoderTCR.reconstruct.components import reference_identity
+print(json.dumps({
+    'implementation': implementation_info(),
+    'reference': reference_identity(sys.argv[1], species=sys.argv[2]),
+}, sort_keys=True))
+"""
+    try:
+        process = subprocess.run(
+            [str(python), "-c", script, convention, species], cwd=root,
+            env=_decoder_environment(python), capture_output=True, text=True, timeout=30, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise RuntimeError("could not verify DecoderTCR reconstruction references") from exc
+    if process.returncode:
+        raise RuntimeError("could not verify DecoderTCR reconstruction references: " + process.stderr[-2000:])
+    try:
+        identity = json.loads(process.stdout)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("DecoderTCR reconstruction identity is invalid") from exc
+    if not isinstance(identity.get("implementation"), dict) or not isinstance(identity.get("reference"), dict):
+        raise ValueError("DecoderTCR reconstruction identity is incomplete")
+    return {"reconstruction_contract_version": 2, "reconstruction_identity": identity}
+
+
 def _model_fingerprint(
     decoder_dir: PathLike, python_executable: PathLike, model: str, *,
-    weight_source: str = "registry", hf_repo: Optional[str] = None,
+    weight_source: str = "registry", hf_repo: Optional[str] = None, species: str = "human",
 ) -> Dict[str, Any]:
     spec = resolve_model(model)
     source = weight_source_descriptor(model, weight_source, hf_repo)
     fingerprint = {"model": spec.name, "model_id": spec.model_id, "weight_source": source["kind"],
-                   **_decoder_fingerprint(decoder_dir, python_executable, source=source)}
+                   **_decoder_fingerprint(decoder_dir, python_executable, source=source),
+                   **_reconstruction_fingerprint(decoder_dir, python_executable, spec.convention, species)}
     if source["kind"] == "huggingface":
         fingerprint["hf_registry"] = source["registry"]
+        fingerprint["hf_repo"] = source["repo"]
     verify_sequence_convention(fingerprint)
     return fingerprint
 
@@ -1006,10 +1043,11 @@ def run_decoder(
         from .backends import mlx_decoder
         model_fingerprint = mlx_decoder.fingerprint(
             decoder_dir, python_executable, model, checkpoint, mlx_python,
-            batch_size=batch_size, token_budget=token_budget, cache_bytes=cache_bytes, precision=precision)
+            batch_size=batch_size, token_budget=token_budget, cache_bytes=cache_bytes,
+            precision=precision, weight_source=weight_source, hf_repo=hf_repo, species=species)
     else:
         model_fingerprint = _model_fingerprint(decoder_dir, python_executable, model,
-            weight_source=weight_source, hf_repo=hf_repo)
+            weight_source=weight_source, hf_repo=hf_repo, species=species)
     fingerprint = {
         **model_fingerprint,
         **biology,
@@ -1222,10 +1260,11 @@ def run_decoder_profile(
         from .backends import mlx_decoder
         fingerprint = mlx_decoder.fingerprint(
             decoder_dir, python_executable, model, checkpoint, mlx_python,
-            batch_size=batch_size, token_budget=token_budget, cache_bytes=cache_bytes, precision=precision)
+            batch_size=batch_size, token_budget=token_budget, cache_bytes=cache_bytes,
+            precision=precision, weight_source=weight_source, hf_repo=hf_repo, species=species)
     else:
         fingerprint = _model_fingerprint(decoder_dir, python_executable, model,
-            weight_source=weight_source, hf_repo=hf_repo)
+            weight_source=weight_source, hf_repo=hf_repo, species=species)
     fingerprint.update(precision=precision, approximate=precision == "float16", **biology)
     with tempfile.TemporaryDirectory(prefix="profile-", dir=output.parent) as temporary:
         candidate = Path(temporary) / "profile.csv"
