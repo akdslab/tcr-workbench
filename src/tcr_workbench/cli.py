@@ -95,7 +95,8 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("--state-dir", type=Path, default=None, help="Prepared model cache (default: managed .tcr/prepared)")
     s.add_argument("--model-id", help="Explicit release/custom identity; defaults to the checkpoint SHA-256")
     s.add_argument("--expected-sha256", help="Provider's checkpoint checksum, if available")
-    s.add_argument("--plan", action="store_true", help="Inspect tensor metadata and memory estimates without loading/running the model")
+    s.add_argument("--plan", action="store_true",
+                   help="Estimate resources from release metadata without inspecting or transferring weights")
     s.add_argument("--sequence-length", type=int, default=2048, help="Model tokens for planning (default: conservative 2048)")
     s.add_argument("--estimate-forwards", type=int,
                    help="Rough timing for N distinct model context rows after cache reuse (requires local preparation timing)")
@@ -255,7 +256,8 @@ def execute(args: argparse.Namespace) -> None:
             if path is not None and not path.is_file():
                 raise ValueError(f"Input file is missing: {path}")
         state = getattr(args, "state_dir", None) or os.environ.get("TCR_WORKBENCH_PREPARE_DIR", ".tcr/prepared")
-        prepared, record = prepare_model(_decoder_kwargs(args), state,
+        preparation_options = {**_decoder_kwargs(args), "species": getattr(args, "species", "human")}
+        prepared, record = prepare_model(preparation_options, state,
             model_id=getattr(args, "model_id", None), expected_sha256=getattr(args, "expected_sha256", None),
             reference_checkpoint=getattr(args, "reference_checkpoint", None),
             plan_only=getattr(args, "plan", False), allow_memory_risk=args.allow_memory_risk,

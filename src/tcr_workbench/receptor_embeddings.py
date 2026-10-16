@@ -116,14 +116,18 @@ def _fingerprint(options: PMHCOptions) -> dict:
         from .backends.mlx_decoder import fingerprint
         result = fingerprint(options.decoder_dir, options.python_executable, options.model,
             options.checkpoint, options.mlx_python, batch_size=options.batch_size,
-            token_budget=options.token_budget, cache_bytes=options.cache_bytes, precision=options.precision)
+            token_budget=options.token_budget, cache_bytes=options.cache_bytes,
+            precision=options.precision, weight_source=options.weight_source,
+            hf_repo=options.hf_repo, species=options.species)
     else:
-        result = _model_fingerprint(options.decoder_dir, options.python_executable, options.model)
+        result = _model_fingerprint(options.decoder_dir, options.python_executable, options.model,
+            weight_source=options.weight_source, hf_repo=options.hf_repo, species=options.species)
         # The registry artifact hash is the reused-vector identity for torch runs.
         result.update(backend="torch", device=options.device,
                       checkpoint_sha256=result["artifact_sha256"])
     return {**result, "context_type": "independent-receptor-chains", "species": options.species,
             "representation": REPRESENTATION, "feature_version": FEATURE_VERSION,
+            "receptor_reconstruction_contract_version": 1,
             "precision": "float32", "math_precision": "float32-no-tf32"}
 
 
@@ -140,6 +144,8 @@ def _run_worker(input_path: Path, staging: Path, options: PMHCOptions, fingerpri
     else:
         executable = fingerprint["python_executable"]
         model_arguments = ["--model-id", fingerprint["model_id"]]
+        if fingerprint["weight_source"] == "huggingface":
+            model_arguments += ["--registry", fingerprint["hf_registry"]]
     _execute([executable, "-I", str(worker), "--phase", "infer", "--input", str(reconstructed),
               "--output", str(staging), "--species", options.species, "--model", options.model,
               "--device", options.device, *model_arguments,
@@ -162,43 +168,50 @@ def _validate_vectors(vectors: np.ndarray, rows: int, width: int) -> None:
 
 
 def _validate(staging: Path, expected: pl.DataFrame, options: PMHCOptions, fingerprint: dict):
+    vectors = None
     try:
         runtime = EmbeddingRuntime.model_validate_json((staging / "embedding_runtime.json").read_text()).model_dump()
         audit = pl.read_csv(staging / "embedding_audit.csv", infer_schema=False, missing_utf8_is_empty_string=True)
         ids = json.loads((staging / "embedding_ids.json").read_text())
         vectors = np.load(staging / "receptor_embeddings.npy", mmap_mode="r", allow_pickle=False)
+        width = WIDTHS[options.model]
+        if (runtime["model"] != options.model or runtime["device"] != options.device
+                or runtime["backend"] != ("mlx" if options.device == "apple" else "torch")
+                or runtime["source_checkpoint_sha256"] != fingerprint["checkpoint_sha256"]
+                or runtime["chain_dimension"] != width or runtime["vector_dimension"] != 2 * width):
+            raise InputError("Embedding worker changed model, device, checkpoint or vector dimensions")
+        required = {*INPUT_COLUMNS, "status", "reason", "TRAV", "TRAJ", "TRBV", "TRBJ", *HASH_FIELDS}
+        if not required.issubset(audit.columns) or audit.height != expected.height:
+            raise InputError("Embedding worker audit has missing columns or changed row coverage")
+        if not audit.select(INPUT_COLUMNS).equals(expected.select(INPUT_COLUMNS).fill_null("")):
+            raise InputError("Embedding worker changed receptor identities, species or input components")
+        if (~audit["status"].is_in(["Embedded", "Unresolved"])).any():
+            raise InputError("Embedding worker returned unknown statuses")
+        embedded = audit.filter(pl.col("status") == "Embedded")
+        unresolved = audit.filter(pl.col("status") == "Unresolved")
+        if unresolved.filter(pl.col("reason").str.strip_chars() == "").height:
+            raise InputError("Unresolved embedding receptors must retain an explicit reason")
+        if audit.filter((expected["status"] == "Unresolved") & (pl.col("status") != "Unresolved")).height:
+            raise InputError("Embedding worker inferred components for an ineligible receptor")
+        if any(embedded.filter(~pl.col(field).str.contains(r"^[a-f0-9]{64}$")).height for field in HASH_FIELDS):
+            raise InputError("Successful receptor embeddings require full-chain identity hashes")
+        if (not isinstance(ids, list) or ids != embedded["embedding_id"].to_list()
+                or vectors.shape != (embedded.height, 2 * width) or vectors.dtype != np.float32
+                or runtime["rows"] != audit.height or runtime["embedded"] != embedded.height
+                or runtime["unresolved"] != unresolved.height
+                or runtime["unique_chains"] != len(set(embedded["alpha_sha256"]) | set(embedded["beta_sha256"]))
+                or (runtime["batches"] == 0) != (embedded.height == 0)):
+            raise InputError("Embedding vectors, identities or runtime row coverage disagree")
+        _validate_vectors(vectors, len(ids), width)
+        return ids, audit, runtime
+    except InputError:
+        raise
     except (OSError, ValueError, TypeError) as exc:
         raise InputError(f"Invalid receptor embedding worker output: {exc}") from exc
-    width = WIDTHS[options.model]
-    if (runtime["model"] != options.model or runtime["device"] != options.device
-            or runtime["backend"] != ("mlx" if options.device == "apple" else "torch")
-            or runtime["source_checkpoint_sha256"] != fingerprint["checkpoint_sha256"]
-            or runtime["chain_dimension"] != width or runtime["vector_dimension"] != 2 * width):
-        raise InputError("Embedding worker changed model, device, checkpoint or vector dimensions")
-    required = {*INPUT_COLUMNS, "status", "reason", "TRAV", "TRAJ", "TRBV", "TRBJ", *HASH_FIELDS}
-    if not required.issubset(audit.columns) or audit.height != expected.height:
-        raise InputError("Embedding worker audit has missing columns or changed row coverage")
-    if not audit.select(INPUT_COLUMNS).equals(expected.select(INPUT_COLUMNS).fill_null("")):
-        raise InputError("Embedding worker changed receptor identities, species or input components")
-    if (~audit["status"].is_in(["Embedded", "Unresolved"])).any():
-        raise InputError("Embedding worker returned unknown statuses")
-    embedded = audit.filter(pl.col("status") == "Embedded")
-    unresolved = audit.filter(pl.col("status") == "Unresolved")
-    if unresolved.filter(pl.col("reason").str.strip_chars() == "").height:
-        raise InputError("Unresolved embedding receptors must retain an explicit reason")
-    if audit.filter((expected["status"] == "Unresolved") & (pl.col("status") != "Unresolved")).height:
-        raise InputError("Embedding worker inferred components for an ineligible receptor")
-    if any(embedded.filter(~pl.col(field).str.contains(r"^[a-f0-9]{64}$")).height for field in HASH_FIELDS):
-        raise InputError("Successful receptor embeddings require full-chain identity hashes")
-    if (not isinstance(ids, list) or ids != embedded["embedding_id"].to_list()
-            or vectors.shape != (embedded.height, 2 * width) or vectors.dtype != np.float32
-            or runtime["rows"] != audit.height or runtime["embedded"] != embedded.height
-            or runtime["unresolved"] != unresolved.height
-            or runtime["unique_chains"] != len(set(embedded["alpha_sha256"]) | set(embedded["beta_sha256"]))
-            or (runtime["batches"] == 0) != (embedded.height == 0)):
-        raise InputError("Embedding vectors, identities or runtime row coverage disagree")
-    _validate_vectors(vectors, len(ids), width)
-    return vectors, ids, audit, runtime
+    finally:
+        mapping = getattr(vectors, "_mmap", None)
+        if mapping is not None:
+            mapping.close()
 
 
 def embed_receptors(frame: pl.DataFrame, output_dir, **decoder_kwargs) -> EmbeddingResult:
@@ -219,8 +232,7 @@ def embed_receptors(frame: pl.DataFrame, output_dir, **decoder_kwargs) -> Embedd
         normalized.write_csv(worker_input)
         _run_worker(worker_input, staging, options, provenance)
         worker_input.unlink()
-        vectors, ids, audit, runtime = _validate(staging, normalized, options, provenance)
-        del vectors
+        ids, audit, runtime = _validate(staging, normalized, options, provenance)
         audit = _annotate_gene_resolution(audit.with_columns(
             pl.when(pl.col("status") == "Embedded").then(pl.lit("ModelHypothesis"))
             .otherwise(pl.col("status")).alias("status"))).with_columns(

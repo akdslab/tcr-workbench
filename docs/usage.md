@@ -137,6 +137,8 @@ DecoderTCR masks **all peptide residues at once**, predicts from the MHC or TCRâ
 
 Compare scores only within the same checkpoint, species, receptor/MHC context, peptide length and precision mode. Profiles normalize only the 20 canonical amino-acid channels and cannot reconstruct the absolute full-vocabulary score.
 
+V2 receptor-conditioned scoring and profiles use mature reconstructed TCR chains after verified leader removal. Results from older Workbench versions that retained those leaders are not directly comparable. Experimental receptor embeddings continue to use the full reconstructed chains, with no change to their pooling or numerical contract.
+
 `screen` matches curated references by exact or similar CDR3 without model weights. Its `Candidate` label is a hypothesis. The [example guide](../examples/README.md) includes a fabricated reference for testing only.
 
 ## Experimental embedding matching
@@ -160,15 +162,15 @@ With embedding matching enabled, both searches restrict reference rows to the re
 
 ## Hardware and saved settings
 
-Commands use saved runtime defaults unless overridden by flags. Select another configuration with `python3 tcr.py --config /path/to/runtime.json ...`. For an existing installation, see `python3 tcr.py configure --help`; supply its `DecoderTCR` interpreter. Weights are resolved from the shared registry (`decodertcr configure --registry <root>` or `DECODERTCR_REGISTRY`). `--model` and `--device` select model and hardware independently.
+Commands use saved runtime defaults unless overridden by flags. Select another configuration with `python3 tcr.py --config /path/to/runtime.json ...`. For an existing installation, see `python3 tcr.py configure --help` and supply its `DecoderTCR` interpreter. Select its registry with `decodertcr init --registry <root>` or `DECODERTCR_PUBLIC_REGISTRY`. Workbench setup also accepts `--registry` or `DECODERTCR_REGISTRY`. `--model` and `--device` select model and hardware independently.
 
 | Device | Supported path | Precision |
 |---|---|---|
 | `cpu` | CPU on Mac or Linux | `float32` |
-| `gpu` or `cuda:N` | NVIDIA GPU on Linux; untested | `float32` |
+| `gpu` or `cuda:N` | NVIDIA GPU on Linux. Validation is model and workflow specific | `float32` |
 | `apple` | Apple Silicon; 6B is experimental | `float32` default; explicit `float16` for 300M only |
 
-NVIDIA execution and 6B inference are untested. For a different model or release, follow [models and upgrades](upgrading.md).
+The 600M and 6B NVIDIA paths are not validated with this tool. For a different model or release, follow [models and upgrades](upgrading.md).
 
 For an installed Apple configuration, approximate FP16 is optional:
 

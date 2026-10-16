@@ -37,7 +37,7 @@ Workflows use DecoderTCR 300M, 600M and 6B checkpoints fine-tuned from ESM-C. Th
 
 Do not silently switch models, devices or precision, or add `--allow-memory-risk`. That override requires an explicit resource-risk choice; it never bypasses architecture, finite-value or parity checks. Keep unknown capacity marked unknown. Respect the separate CPU reference/conversion requirement for Apple preparation.
 
-Apple FP16 is an explicit approximate 300M option. The 6B Apple path is architecture-checked but lacks real-checkpoint inference validation here; NVIDIA execution is also untested here. A successful tiny forward is not universal numerical or biological validation. New architectures need a declared adapter, not inferred attention heads or renamed tensor keys.
+Apple FP16 is an explicit approximate 300M option. The 6B Apple path is architecture-checked but lacks real-checkpoint inference validation here. NVIDIA validation is model and workflow specific. A successful 300M worker run does not establish high-level parity, other model sizes, universal numerical behavior or biological validation. New architectures need a declared adapter, not inferred attention heads or renamed tensor keys.
 
 ## Change the code
 

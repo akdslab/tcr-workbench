@@ -1,6 +1,6 @@
 # TCR-Workbench
 
-**A command-line toolkit for TCR–pMHC modeling with [DecoderTCR](https://github.com/Biohub/DecoderTCR).**
+**A command-line toolkit for TCR-pMHC modeling with [DecoderTCR](https://github.com/akdslab/DecoderTCR).**
 
 For Google Colab notebooks and Hugging Face inference, visit [TCR Challenge](https://tcrchallenge.org).
 
@@ -264,13 +264,15 @@ The exact molecule must be in the model's reference. Workbench does not guess mi
 
 Workbench uses **DecoderTCR 300M, 600M and 6B**, fine-tuned from ESM-C, resolved from the shared registry as **`decodertcr@1.5.0`** (V2 sequence convention). The default is **DecoderTCR 300M**. This is a model upgrade from the earlier V0.3 (V1) models; scores and benchmarks can differ. Weights are fetched and verified from the registry on first use rather than downloaded per machine. The ESM2 model variants are not part of this build.
 
+For V2 scoring and profiles, Workbench removes the verified reconstructed leader peptides before assembling the DecoderTCR context. This matches the V2 package preparation contract, so corrected scores can differ from Workbench results produced before this fix. Experimental receptor embeddings still use the original full reconstructed chains and their pooling calculation is unchanged.
+
 | Model | CPU / NVIDIA GPU | Apple Silicon |
 |---|---|---|
 | DecoderTCR 300M | Supported / Supported | Supported |
-| DecoderTCR 600M | Supported / Supported | Supported |
-| DecoderTCR 6B | Experimental / Supported | Experimental |
+| DecoderTCR 600M | Supported / Available, not validated | Supported |
+| DecoderTCR 6B | Experimental / Available, not validated | Experimental |
 
-NVIDIA execution and 6B inference have not been tested with this tool. Default precision is FP32; our Apple 300M model also offers an optional approximate FP16 mode (`--precision float16`). Use FP16 for faster inference if local hardware resources are limited.
+NVIDIA execution requires a compatible CUDA setup. Hardware validation is model and workflow specific. The 600M and 6B NVIDIA paths have not been validated with this tool. Default precision is FP32. The Apple 300M model also offers an optional approximate FP16 mode (`--precision float16`). Use FP16 for faster inference if local hardware resources are limited.
 
 Select DecoderTCR 300M, 600M or 6B with `--model esmc-300m`, `--model esmc-600m` or `--model esmc-6b`. These existing CLI names refer to the fine-tuned DecoderTCR variants, now resolved as `decodertcr@1.5.0` (300M/600M/6B) from the registry. Select hardware independently with `--device cpu`, `--device apple` or `--device gpu`, using the matching installed runtime and weights. The launcher fetches and verifies registry weights on first use, prepares Apple weights when needed, and stops if estimated memory exceeds the available budget.
 
@@ -295,18 +297,17 @@ Preparation checks compatibility and resources before scoring; it does not chang
 
 </details>
 
-## Published DecoderTCR benchmarks
+## DecoderTCR benchmark references
 
-The latest benchmarks are in the [DecoderTCR benchmark README](https://github.com/Biohub/DecoderTCR). The 600M and 6B models typically perform best on most classification tasks. 300M is a useful exploratory tool. The table below reports the earlier **V0.3 (V1)** models; the shipped `decodertcr@1.5.0` **V2** models are a model upgrade and their benchmarks are being re-established. Treat the V2 figures as pending and do not read the V0.3 numbers as current V2 results.
+These historical prepared-input reference scores correspond to the DecoderTCR models shipped by Workbench.
 
-| Benchmark | Metric | 300M | 600M | 6B |
-|---|---|---:|---:|---:|
-| TCRvdb: receptors present in training | AUROC | **0.853** | 0.819 | 0.779 |
-| IMMREP23: largely unseen receptors | Macro AUROC | 0.659 | **0.698** | 0.687 |
-| Viral: ePytope-TCR benchmark | Macro AUROC | 0.640 | **0.657** | 0.644 |
-| PRP: HLA-B*27:05 peptide-library retrieval | Macro AUPRC | 0.303 | 0.351 | **0.391** |
+| Model | IMMREP23 macro AUROC | Viral public grid macro AUROC |
+|---|---:|---:|
+| `decodertcr@1.5.0:300M` | 0.6749 | 0.6957 |
+| `decodertcr@1.5.0:600M` | **0.6944** | 0.6707 |
+| `decodertcr@1.5.0:6B` | 0.6846 | **0.7057** |
 
-**AUROC** describes how well scores rank labeled binders above labeled nonbinders. **AUPRC** summarizes the balance between finding binders and including false positives; its baseline depends on binder prevalence. **Macro** means averaging across epitopes or receptor clones. These are not percentages of correct predictions. TCRvdb does not test new receptors; the Viral comparison assigns missing predictions a score of 0.5. PRP uses an anchor-fixed library. [Original figures, protocols and dataset citations](https://github.com/Biohub/DecoderTCR#results).
+These scores use prepared sequence inputs and unweighted macro AUROC across peptide groups. Gene-input scores may differ. The Viral public grid is a historical cross-lineage reference whose negatives often contain foreign HLA. It is distinct from the within-allele Viral benchmark. AUROC measures ranking, not the percentage of predictions that are correct.
 
 ## Documentation and help
 

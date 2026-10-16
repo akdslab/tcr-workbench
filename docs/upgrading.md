@@ -5,10 +5,10 @@ Use DecoderTCR 300M for a first local analysis. Larger models need more memory; 
 | DecoderTCR model | `--model` | Precision |
 |---|---|---|
 | 300M | `esmc-300m` | FP32; optional approximate FP16 on Apple |
-| 600M | `esmc-600m` | FP32 |
-| 6B | `esmc-6b` | FP32; inference untested |
+| 600M | `esmc-600m` | FP32. NVIDIA path not validated here |
+| 6B | `esmc-6b` | FP32. NVIDIA and Apple paths not validated here |
 
-These flags select fine-tuned DecoderTCR models, resolved from the shared registry as `decodertcr@1.5.0` (300M/600M/6B, V2 sequence convention). This is a model upgrade from the earlier V0.3 (V1) models, so scores can differ. NVIDIA execution is untested, and Apple 6B support is experimental. The ESM2 variants are not part of this build.
+These flags select fine-tuned DecoderTCR models, resolved from the shared registry as `decodertcr@1.5.0` (300M/600M/6B, V2 sequence convention). This is a model upgrade from the earlier V0.3 (V1) models, so scores can differ. NVIDIA validation is model and workflow specific. The 600M and 6B NVIDIA paths are not validated here, and Apple 6B support is experimental. The ESM2 variants are not part of this build.
 
 For 600M on Apple Silicon:
 
@@ -29,12 +29,12 @@ The 6B model is large: FP32 weights alone occupy about **23.7 GiB of memory**, a
 Weights are resolved from the shared registry, not downloaded per machine. Point the model package at the registry once, then list what it exposes:
 
 ```sh
-decodertcr configure --registry /path/to/decodertcr-registry
+decodertcr init --registry /path/to/decodertcr-registry
 decodertcr models          # active releases
 decodertcr models --all    # also archived / blocked releases
 ```
 
-You can instead set `DECODERTCR_REGISTRY` or write `~/.config/decodertcr-public/config.json`. The `esmc-300m`/`esmc-600m`/`esmc-6b` names map to the corresponding `decodertcr@1.5.0` sizes. A release shown only under `--all` as archived or blocked is not usable as-is; a release requiring a newer package than `DecoderTCR==1.5.0` needs a package upgrade, not a metadata edit.
+You can instead set `DECODERTCR_PUBLIC_REGISTRY` for one process. Workbench setup also accepts `--registry` or `DECODERTCR_REGISTRY` before it creates the model environment. The `esmc-300m`/`esmc-600m`/`esmc-6b` names map to the corresponding `decodertcr@1.5.0` sizes. A release shown only under `--all` as archived or blocked is not usable as-is. A release requiring a newer package than `DecoderTCR==1.5.0` needs a package upgrade, not a metadata edit.
 
 Weights are verified when first fetched from the registry, so a partial or wrong artifact is rejected. Cached artifacts are reused by release identity; existing results keep their original model details.
 
@@ -65,7 +65,7 @@ Estimate resource requirements before loading a large model:
 python3 tcr.py prepare-model --model esmc-6b --device apple --plan
 ```
 
-`--plan` estimates requirements without running inference or converting weights. Apple preparation also needs memory for the CPU comparison. A model that fits during inference may still be too large to prepare on that machine.
+`--plan` reports conservative, unvalidated estimates from release metadata. It does not inspect or transfer weights, scan preparation caches, run inference or convert Apple weights. Apple preparation also needs memory for the later CPU comparison. A model that fits during inference may still be too large to prepare on that machine.
 
 If a memory check stops the run, free memory, reduce `--batch-size` or choose a smaller model. `--allow-memory-risk` overrides that stop and can cause memory exhaustion or heavy swapping.
 

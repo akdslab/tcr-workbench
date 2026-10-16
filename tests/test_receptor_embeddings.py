@@ -1,5 +1,6 @@
 import csv
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
@@ -211,6 +212,7 @@ def test_corrupt_worker_cannot_publish(corruption, tmp_path, monkeypatch, fake_r
     with pytest.raises(InputError):
         host.embed_receptors(receptor_frame(), tmp_path / "out", **OPTIONS)
     assert not (tmp_path / "out").exists()
+    assert not list(tmp_path.glob(".out-*"))
 
 
 def test_checkpoint_changed_during_run_cannot_publish(tmp_path, monkeypatch, fake_runtime):
@@ -246,14 +248,53 @@ def test_worker_deduplication_across_distinct_receptors(tmp_path):
         assert len(list(csv.DictReader(handle))) == 2
 
 
+def test_independent_embeddings_keep_full_reconstructed_chains(tmp_path):
+    frame = host._input_frame(receptor_frame().head(1))
+    frame.write_csv(tmp_path / "input.csv")
+    alpha, beta = "A" * 275, "C" * 310
+
+    def stitch(rows):
+        return {row["name"]: dict(TCR_a=alpha, TCR_b=beta, ok=True, reason="",
+                                  **{key: row[key.lower()] for key in worker.SELECTED}) for row in rows}
+
+    worker.reconstruct(tmp_path / "input.csv", tmp_path / "reconstructed.csv", "human", stitch=stitch)
+    calls = []
+    args = worker_args(tmp_path / "reconstructed.csv", tmp_path / "out")
+    args.token_budget = 1024
+    worker.infer(args, encoder_loader=lambda value: fake_encoder(value, calls))
+    assert calls == [[alpha, beta]]
+
+
+def test_huggingface_source_is_forwarded_to_embedding_worker(tmp_path, monkeypatch):
+    options = host._options(receptor_frame(), OPTIONS | {"weight_source": "huggingface", "hf_repo": "org/repo"})
+    fingerprint = FINGERPRINT | {
+        "weight_source": "huggingface", "hf_registry": "hf://org/repo/registry",
+        "model_id": "decodertcr@1.5.0:300M",
+    }
+    commands = []
+    def execute(command, *args):
+        commands.append(command)
+        if "--phase" in command and command[command.index("--phase") + 1] == "reconstruct":
+            Path(command[command.index("--output") + 1]).write_text("placeholder")
+    monkeypatch.setattr(host, "_execute", execute)
+    host._run_worker(tmp_path / "input.csv", tmp_path, options, fingerprint)
+    infer = commands[1]
+    assert infer[infer.index("--registry") + 1] == "hf://org/repo/registry"
+
+
 def test_torch_pool_matches_reference_without_logits_or_layer_stack(monkeypatch):
     """Optional tiny oracle; no checkpoints/downloads or large model allocation."""
     torch = pytest.importorskip("torch")
     esmc = pytest.importorskip("esmc.models.esmc")
-    tokenizer_module = pytest.importorskip("esmc.tokenization")
+    constants = pytest.importorskip("DecoderTCR.constants")
     torch.manual_seed(19)
-    model = esmc.ESMC(64, 1, 2, tokenizer_module.EsmSequenceTokenizer()).eval()
-    tokens = torch.tensor(worker.token_array(["ACDE", "FG"], model.tokenizer.encode, 1)).long()
+    tokenizer = SimpleNamespace(pad_token_id=constants.ALPHABET.padding_idx)
+    model = esmc.ESMC(64, 1, 2, tokenizer).eval()
+    def encode(sequence):
+        return [constants.ALPHABET.cls_idx, *constants.ALPHABET.encode(sequence),
+                constants.ALPHABET.eos_idx]
+    tokens = torch.tensor(worker.token_array(["ACDE", "FG"], encode,
+                                             tokenizer.pad_token_id)).long()
     with torch.inference_mode():
         official = model(sequence_tokens=tokens).embeddings
         expected = torch.stack([official[0, 1:5].mean(0), official[1, 1:3].mean(0)])
