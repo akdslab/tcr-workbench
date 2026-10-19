@@ -5,10 +5,11 @@ description: Run local TCR-Workbench analyses of processed human or mouse alpha-
 
 # TCR-Workbench
 
-Use the repository's `python3 tcr.py` launcher. The bundled location is
-`skills/tcr-workbench/`; the repository root is two directories above that skill
-folder. Confirm `tcr.py` exists and run commands from its directory. If the skill
-has been copied elsewhere, locate the user's checkout instead of inventing a path.
+Use the `python3 tcr.py` launcher in the user's TCR-Workbench checkout. This
+skill may be read from inside that checkout (`skills/tcr-workbench/`) or served
+on its own, so do not assume where it sits: find the folder that contains
+`tcr.py`, ask the user if more than one exists, and run commands from that
+folder. If no checkout exists, use the `tcr-workbench-setup` skill.
 This skill is optional; ordinary command-line use does not require an agent.
 
 ## Establish the available runtime
@@ -65,7 +66,7 @@ biological accuracy or absence of training overlap.
   with `--species mouse` installs mouse germlines. The bundled mouse MHC reference
   contains exact H-2-Kb, H-2-Db, H-2-IAb and H-2-IAk mature chains; other supported
   names require a versioned `--mhc-reference` file. Inspect the schema in
-  `docs/input-formats.md`; never substitute human HLA or human germlines.
+  `docs/input-formats.md` in the user's checkout; never substitute human HLA or human germlines.
   Species support and successful execution do not establish a checkpoint's
   training coverage or predictive accuracy. Future mouse-trained checkpoints
   still need their own identity, compatibility checks and experimental validation.
