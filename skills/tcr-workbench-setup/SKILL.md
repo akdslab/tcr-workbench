@@ -1,15 +1,6 @@
 ---
 name: tcr-workbench-setup
-description: >-
-  Install and verify a local TCR-Workbench environment so a bench scientist can score TCR-pMHC
-  data. Use when the user wants to install TCR-Workbench, set it up on their laptop or
-  workstation, choose where model weights come from (HuggingFace or the shared registry), choose
-  CPU / Apple Silicon / NVIDIA GPU or a model size, or diagnose why setup, the weights, or the model
-  won't run. Triggers: "install tcr-workbench", "set it up", "run on my laptop / Mac / GPU",
-  "pull weights from HuggingFace", "configure the registry", "which model for my hardware", "doctor
-  says it's not set up", "decodertcr not installed / can't reach HuggingFace / registry not
-  configured", environment/import/auth failures. NOT for analysis (see the tcr-workbench skill) or
-  raw FASTQ assembly.
+description: Install, configure and verify a local TCR-Workbench environment so a bench scientist can score TCR-pMHC data. Use when someone wants to install or set up TCR-Workbench on a laptop, Mac, workstation or GPU machine, choose CPU, Apple Silicon or NVIDIA GPU, pick a model size for their hardware, choose whether weights come from HuggingFace or the shared registry, or diagnose why setup, the weights or the model won't run, such as doctor saying it is not set up, decodertcr not being installed, HuggingFace being unreachable, the registry not being configured, or environment, import, TLS, proxy or authentication failures. Do not use it to run or interpret analyses, which the tcr-workbench skill covers, or for raw FASTQ assembly.
 ---
 
 # TCR-Workbench: install and set up
