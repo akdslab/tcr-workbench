@@ -1,6 +1,6 @@
 ---
 name: tcr-workbench-setup
-description: Install, configure and verify a local TCR-Workbench environment so a bench scientist can score TCR-pMHC data. Use when someone wants to install or set up TCR-Workbench on a laptop, Mac, workstation or GPU machine, choose CPU, Apple Silicon or NVIDIA GPU, pick a model size for their hardware, choose whether weights come from HuggingFace or the shared registry, or diagnose why setup, the weights or the model won't run, such as doctor saying it is not set up, decodertcr not being installed, HuggingFace being unreachable, the registry not being configured, or environment, import, TLS, proxy or authentication failures. Do not use it to run or interpret analyses, which the tcr-workbench skill covers, or for raw FASTQ assembly.
+description: Install, configure and verify a local TCR-Workbench environment so a bench scientist can score TCR-pMHC data; not for running or interpreting analyses, which the tcr-workbench skill covers, and not for raw FASTQ assembly. Use when someone wants to install or set up TCR-Workbench on a laptop, Mac, workstation or GPU machine, choose CPU, Apple Silicon or NVIDIA GPU, pick a model size for their hardware, choose whether weights come from HuggingFace or the shared registry, or diagnose why setup, the weights or the model won't run, such as doctor saying it is not set up, decodertcr not being installed, HuggingFace being unreachable, the registry not being configured, or environment, import, TLS, proxy or authentication failures.
 ---
 
 # TCR-Workbench: install and set up
@@ -24,9 +24,9 @@ This skill covers **agent-ready → scoring-ready**. It assumes the user already
   pulled from whichever source you choose, on first use.
 
 Getting the checkout onto the machine, and (for the registry path) knowing the registry location,
-are prerequisites **outside** this skill — if a needed one is missing, point them to the onboarding
-doc rather than improvising. This skill is optional: an ordinary user can run the commands below
-directly.
+are prerequisites **outside** this skill — if a needed one is missing, say which one and ask the
+user who provides it rather than improvising a source. This skill is optional: an ordinary user can
+run the commands below directly.
 
 ## Mental model
 
