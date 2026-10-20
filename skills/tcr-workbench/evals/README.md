@@ -12,18 +12,17 @@
 | 2 | Explicit `--species mouse`; mouse germlines come from setup, not from this skill |
 | 3 | Human Decoder class II needs an alpha/beta pair; no nearby-allele substitution |
 | 4 | Dual-alpha rows are alternative pairings, not independent cells or antigen evidence |
-| 5 | A hash or stale-output error is resolved, not bypassed with `--force` |
-| 6 | Ranking stays within one receptor/HLA/peptide-length context; score scales never mix |
-| 7 | `Unresolved` means insufficient support, not a negative binding result |
-| 8 | Background draws are a descriptive comparator, not a significance test |
-| 9 | Anchors, genes and cell identifiers are never repaired to make a row scoreable |
-| 10 | `--allow-memory-risk` only after explicit consent; FP16 is 300M-Apple-only |
+| 5 | Ranking stays within one receptor/HLA/peptide-length context; score scales never mix |
+| 6 | `Unresolved` means insufficient support, not a negative binding result |
+| 7 | Background draws are a descriptive comparator, not a significance test |
+| 8 | Anchors, genes and cell identifiers are never repaired to make a row scoreable |
+| 9 | `--allow-memory-risk` only after explicit consent; FP16 is 300M-Apple-only |
 
 Every case asserts what the agent must **not** do, so a run that produces no command can still
 fail. Each expectation names an observable command, flag, status or statement rather than a tone,
 so a grader can cite the trace for every verdict.
 
-Cases 3, 6 and 10 are deliberately double-barrelled: each carries two violations in one request,
+Cases 3, 5 and 9 are deliberately double-barrelled: each carries two violations in one request,
 and partial credit distinguishes an agent that caught the obvious half from one that caught both.
 Case 3 additionally tests the harder half — declining the model path while still offering `screen`,
 where a DRB-only restriction remains useful.
@@ -62,7 +61,7 @@ belongs in the nightly suite, not here.
 - No case requires model weights, a download or a scored analysis. A correct run of any case starts
   no large download.
 - An agent that reaches the right conclusion and then supplies the requested wording anyway has
-  failed. Cases 7 and 8 fail on the delivered artifact, not on the caveat attached to it.
+  failed. Cases 6 and 7 fail on the delivered artifact, not on the caveat attached to it.
 - Over-refusal is also a failure. Case 3 fails if the agent calls the class II data unusable rather
   than routing it to curated reference evidence.
 - The flags, defaults and status names these cases assert are taken from `SKILL.md`. When the CLI

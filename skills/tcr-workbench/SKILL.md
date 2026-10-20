@@ -25,7 +25,8 @@ This skill is optional; ordinary command-line use does not require an agent.
   If it reports the environment is not installed or unhealthy, hand off to the
   `tcr-workbench-setup` skill rather than running `setup` from here.
 - The launcher uses its managed `.tcr/` configuration unless the user supplies
-  `--config`. Honor that choice. Diagnose missing models, references or incompatible
+  `--config`, which is a top-level global and must precede the subcommand
+  (`tcr.py --config FILE pmhc-score ...`). Honor that choice. Diagnose missing models, references or incompatible
   environments before starting an expensive run; do not silently switch devices.
 - For new local checkpoints, inspect `prepare-model --help`. The launcher runs
   cached compatibility checks before model workflows and converts supported Apple
@@ -46,7 +47,7 @@ This skill is optional; ordinary command-line use does not require an agent.
 | Score peptides in an HLA context with DecoderTCR | `pmhc-score` | Uncalibrated model PLL, not affinity or binding probability |
 | Generate a model peptide profile for HLA | `pmhc-profile` | Conditional amino-acid preferences for one HLA and length |
 | Score a specified paired TCR with peptide–MHC | `tcr-score` | DecoderTCR PLL for the supplied receptor/context |
-| Generate a TCR-conditioned peptide profile | `tcr-profile` | Conditional marginals/PSSM, not a demonstrated binding motif |
+| Generate a TCR-conditioned peptide profile | `tcr-profile` (alias of `decoder-profile`, whose name its `--help` prints) | Conditional marginals/PSSM, not a demonstrated binding motif |
 | Screen processed receptors against a supplied panel | `repertoire-score` | Model hypotheses plus retained cell/chain audits |
 | Find curated exact/similar receptor evidence | `screen` | Reference matching with source evidence and HLA checks |
 | Describe a supplied peptide set | `profile` | Empirical frequencies/PSSM, distinct from model marginals |
@@ -75,6 +76,10 @@ biological accuracy or absence of training overlap.
   needs the complete molecule name; partners are not inferred and cross-species
   names are rejected. Other supported names require a versioned `--mhc-reference`
   file, which **replaces the whole reference** with no fallback to bundled entries.
+  That flag exists only on the model-scoring commands — `repertoire-score`,
+  `pmhc-score`, `pmhc-profile`, `tcr-score`, `tcr-profile` and `decoder-run`;
+  `screen`, `validate` and `decoder-export` accept `--species` alone, so a
+  non-bundled molecule cannot be introduced through them.
   Such a file requires `schema_version: 1`, `species: "mouse"`, a nonempty `source`,
   and a `molecules` object keyed by exact canonical H-2 names; each molecule carries
   `class` (`"I"` or `"II"`), `HLA_a`, `HLA_b` and its own `source`, with both chains
@@ -143,11 +148,14 @@ a calibrated workflow ETA. Elapsed worker heartbeats are not percentages.
 
 ## Run and report auditable analyses
 
-Use fresh output paths. Keep existing completed analyses and raw inputs intact;
-do not use `--force` merely to bypass a stale-output or hash error. Resolve the
-input/configuration mismatch, or explicitly replace outputs only within the
-user's authorized scope. Bound panel size, batching and threads using the actual
-command's supported options; do not expand a panel into an unrestricted search.
+Use fresh output paths. Analysis commands never overwrite an existing output
+directory and offer no override for it: a collision fails with `Output already
+exists`, and the fix is a new `--out`. (`--force` exists only on `configure` and
+`decoder-run`, and is not an answer to a collision.) Keep existing completed
+analyses and raw inputs intact; resolve an input/configuration mismatch rather
+than relocating around it, and replace outputs only within the user's authorized
+scope. Bound panel size, batching and threads using the actual command's
+supported options; do not expand a panel into an unrestricted search.
 
 Inspect result tables, QC/skipped-row reasons and manifests, not only the HTML
 preview. Report scored and unresolved counts, model/reference versions, device,

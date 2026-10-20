@@ -1,6 +1,6 @@
 ---
 name: tcr-workbench-setup
-description: Install, configure and verify a local TCR-Workbench environment so a bench scientist can score TCR-pMHC data; not for running or interpreting analyses, which the tcr-workbench skill covers, and not for raw FASTQ assembly. Use when someone wants to install or set up TCR-Workbench on a laptop, Mac, workstation or GPU machine, choose CPU, Apple Silicon or NVIDIA GPU, pick a model size for their hardware, choose whether weights come from HuggingFace or the shared registry, or diagnose why setup, the weights or the model won't run, such as doctor saying it is not set up, decodertcr not being installed, HuggingFace being unreachable, the registry not being configured, or environment, import, TLS, proxy or authentication failures.
+description: Install, configure and verify a local TCR-Workbench environment up to the point where analyses can run; not for running or interpreting analyses, which the tcr-workbench skill covers, and not for raw FASTQ assembly. Use when someone wants to install or set up TCR-Workbench on a laptop, Mac, workstation or GPU machine, choose CPU, Apple Silicon or NVIDIA GPU, pick a model size for their hardware, choose whether weights come from HuggingFace or the shared registry, or diagnose why setup, the weights or the model won't run, such as doctor saying it is not set up, decodertcr not being installed, HuggingFace being unreachable, the registry not being configured, or environment, import, TLS, proxy or authentication failures.
 ---
 
 # TCR-Workbench: install and set up
@@ -174,7 +174,8 @@ python3 tcr.py doctor --deep
 ```
 
 Expect it to report the installed device, model, precision, and a reachable weight source — either
-`HuggingFace source OK: <repo> <commit> …` or a reachable registry — plus healthy framework imports.
+`HuggingFace registry OK: <hf://repo/prefix> <model_id> <convention> <sha256…>` or a reachable
+registry (`Registry release OK: …`) — plus healthy framework imports.
 If it passes, setup is done; weights are pulled on first scoring.
 
 ## Step 7 — first run / hand-off
@@ -195,10 +196,10 @@ interpretation.
 - **Where weights live:** the launcher sets `HF_HUB_CACHE` under `.tcr/envs/model/hf-cache`, so
   downloads persist with the project. If the environment is ephemeral (a sandbox that resets),
   keeping `.tcr/` avoids re-downloading; otherwise first scoring re-fetches the weights.
-- **Provenance:** each run records `weight_source`, `hf_repo`, the resolved repo-head commit and the
-  catalog/manifest/artifact sha256 in the output manifest — use these to confirm which weights
-  produced a result. The Hub registry always pins the current repo head commit, so there is no
-  manual revision flag.
+- **Provenance:** each run records `weight_source`, `hf_registry`, `hf_repo`, the model and
+  `model_id`, and the catalog/manifest/artifact sha256 in the output manifest — use these to
+  confirm which weights produced a result. No Hub commit is recorded; the member is pinned by its
+  manifest sha256 and size, and there is no manual revision flag.
 
 ## Registry configuration and access (internal)
 
