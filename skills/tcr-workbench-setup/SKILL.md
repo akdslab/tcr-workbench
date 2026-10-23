@@ -16,8 +16,10 @@ This skill covers **agent-ready → scoring-ready**. It assumes the user already
 
 - a local machine with **Python 3.9+** (the launcher needs 3.9+; setup then provisions its own
   Python 3.12 in a managed environment — `DecoderTCR` is Python 3.12 only), and
+- **`git` on `PATH`** for model setup, which installs `DecoderTCR` from a pinned commit of its
+  public GitHub repository (it is not on PyPI); `--core-only` does not need it, and
 - the TCR-Workbench checkout on disk (from `git clone` or **Code → Download ZIP** on
-  `akds/tcr-workbench`), and
+  `akdslab/tcr-workbench`), and
 - **a way to obtain the weights** — either **internet access to HuggingFace** (the default; a public
   model repo needs no login, a private/gated one needs a token) **or read access to a shared model
   registry** (an internal artifact directory). Setup installs the model package; weights are then
@@ -32,7 +34,7 @@ run the commands below directly.
 
 Everything runs through the repository launcher: **`python3 tcr.py`**. It creates and owns a
 managed `.tcr/` environment (its own Python 3.12, model runtime, germlines). The model *code* is the
-**`DecoderTCR`** package (`1.5.0`); the model *weights* come from one of two sources:
+**`DecoderTCR`** package (`1.5.0`, installed from a pinned commit of `akdslab/DecoderTCR`); the model *weights* come from one of two sources:
 
 - **HuggingFace (default when no registry is configured).** Setup records the Hub registry mirror it
   will use (default `hf://Decoder-CHI/DecoderTCR-staging/registry`); weights are resolved by exact
@@ -133,7 +135,7 @@ this build** — do not offer them. Default is `esmc-300m`.
 
 ## Step 5 — run setup
 
-Setup installs dependencies and `DecoderTCR==1.5.0` into the managed environment, then
+Setup installs dependencies and `DecoderTCR` 1.5.0 (a pinned GitHub commit) into the managed environment, then
 records the weight source. There is no large download during setup — weights arrive on first use.
 
 ```bash
@@ -221,7 +223,7 @@ decodertcr models --all    # also archived / blocked releases
 ```
 
 If a release appears only under `--all` as archived or blocked, it is not usable as-is — choose an
-active release (`decodertcr@1.5.0`). `DecoderTCR==1.5.0` resolves the released
+active release (`decodertcr@1.5.0`). The pinned `DecoderTCR` 1.5.0 package resolves the released
 `decodertcr@1.5.0` checkpoints; if a release needs a newer package, upgrade the package rather than
 editing metadata. Weights are verified when first fetched, so a partial or wrong artifact is
 rejected; scoring runs offline once the artifact is cached locally.
@@ -278,6 +280,7 @@ weights are cached under `.tcr/`.
 | "DecoderTCR registry is not available: No local registry is configured…" | `--weight-source registry` with no registry configured | `decodertcr configure --registry <root>` / set `DECODERTCR_PUBLIC_REGISTRY` / pass `--registry <root>`, or use `--weight-source huggingface` |
 | "Setup stopped … estimated memory exceeds the available budget" | model too big for RAM/VRAM | smaller model or better hardware; `--allow-memory-risk` only with consent |
 | `ModuleNotFoundError: DecoderTCR` / "decodertcr is not installed" | model package missing from the environment | re-run full `setup` for the device |
+| setup fails installing `DecoderTCR @ git+https://…` | `git` missing, or GitHub unreachable | install `git`, or check network/proxy access to github.com, then re-run `setup` |
 | "DecoderTCR <ver> is too old; install >= 1.5.0" | model package below the required version | upgrade the model package |
 | release shows only under `decodertcr models --all` as archived/blocked | that release is not usable as-is | choose an active release (`decodertcr@1.5.0`) |
 | "Setup is needed" / `ModuleNotFoundError` at analysis time | not set up (or core-only, no model) | run `setup` for the device |

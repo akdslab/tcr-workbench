@@ -18,9 +18,11 @@ from tcr import python_in
 UV_VERSION = "0.12.17"
 # The DecoderTCR package (Python 3.12) bundles the model code, stitchr germlines and
 # reconstruction references; model weights are resolved from a registry (a local
-# mirror or the hf:// Hub mirror) by exact model ID, not downloaded here. Override
+# mirror or the hf:// Hub mirror) by exact model ID, not downloaded here. DecoderTCR
+# is not on PyPI, so setup installs one exact commit of its public repository. Override
 # the install source for a local checkout or private index.
-DECODER_PACKAGE = "DecoderTCR==1.5.0"
+DECODER_COMMIT = "077900508a4ab8186a7c3c60f1ca25a4c10b02e8"
+DECODER_PACKAGE = f"DecoderTCR @ git+https://github.com/akdslab/DecoderTCR@{DECODER_COMMIT}"
 SETUP_ALIASES = {"esmc-300m": "DecoderTCR-ESMC_300M", "esmc-600m": "DecoderTCR-ESMC_600M",
                  "esmc-6b": "DecoderTCR-ESMC_6B"}
 # Registry model IDs for the deep probe, which runs in the model environment where
@@ -346,10 +348,10 @@ def setup(args, root: Path):
                   f"mirror {hf_spec} for {model}. Pass --registry for a local mirror, or "
                   "--weight-source to choose explicitly.", flush=True)
         if weight_source == "huggingface":
-            print(f"Installing {DECODER_PACKAGE} and connecting to the HuggingFace registry mirror "
+            print(f"Installing {args.decoder_source} and connecting to the HuggingFace registry mirror "
                   f"{hf_spec}. Weights are fetched and verified on first inference, not here.", flush=True)
         else:
-            print(f"Installing {DECODER_PACKAGE} and connecting to the registry at {registry}. "
+            print(f"Installing {args.decoder_source} and connecting to the registry at {registry}. "
                   "Model weights are resolved from the registry, not downloaded here.", flush=True)
         model_env = state / "envs/model"
         model_python = install_decoder(uv, model_env, env, args.decoder_source,
@@ -429,7 +431,7 @@ def main(argv, *, root: Path) -> int:
     s.add_argument("--hf-repo", help="HuggingFace OWNER/NAME for --weight-source huggingface "
                    "(default: the published DecoderTCR staging mirror)")
     s.add_argument("--decoder-source", default=DECODER_PACKAGE,
-                   help="pip install source for DecoderTCR (default: the pinned release)")
+                   help="pip install source for DecoderTCR (default: the pinned akdslab/DecoderTCR commit)")
     group = s.add_mutually_exclusive_group()
     group.add_argument("--core-only", action="store_true", help="No model/framework/germline installation")
     group.add_argument("--reuse-config", action="append", metavar="PATH",

@@ -31,20 +31,20 @@ Scores rank candidates for experimental testing; they do not establish binding, 
 
 ### 1. Download the folder
 
-On [akds/tcr-workbench](https://github.com/akds/tcr-workbench), choose **Code → Download ZIP**, extract it and enter the repository folder:
+On [akdslab/tcr-workbench](https://github.com/akdslab/tcr-workbench), choose **Code → Download ZIP**, extract it and enter the repository folder:
 
 ```sh
 cd ~/Downloads/tcr-workbench-main
 python3 --version
 ```
 
-The launcher requires **Python 3.9+**; setup provisions Python 3.12 for its managed environments. Choose a permanent folder before setup; moving it afterward can break saved paths. [Python prerequisites](docs/quickstart.md#check-python).
+The launcher requires **Python 3.9+**; setup provisions Python 3.12 for its managed environments. Model setup also needs `git` on `PATH`, because it installs DecoderTCR from a pinned commit of its GitHub repository. Choose a permanent folder before setup; moving it afterward can break saved paths. [Python prerequisites](docs/quickstart.md#check-python).
 
 <details>
 <summary>Prefer Git?</summary>
 
 ```sh
-git clone https://github.com/akds/tcr-workbench.git
+git clone https://github.com/akdslab/tcr-workbench.git
 cd tcr-workbench
 ```
 
@@ -285,7 +285,7 @@ List the releases the registry exposes and select one by model size:
 decodertcr models          # active releases (add --all for archived/blocked)
 ```
 
-The `esmc-300m`/`esmc-600m`/`esmc-6b` names map to the corresponding `decodertcr@1.5.0` sizes. A release that appears only under `--all` as archived or blocked is not usable as-is; a release requiring a newer package than `DecoderTCR==1.5.0` needs a package upgrade rather than metadata edits.
+The `esmc-300m`/`esmc-600m`/`esmc-6b` names map to the corresponding `decodertcr@1.5.0` sizes. A release that appears only under `--all` as archived or blocked is not usable as-is; a release requiring a newer package than the pinned DecoderTCR 1.5.0 commit needs a package upgrade rather than metadata edits.
 
 To estimate resources before a large run, use `--plan`:
 
