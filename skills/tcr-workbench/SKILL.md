@@ -24,7 +24,11 @@ This skill is optional; ordinary command-line use does not require an agent.
 - Run `python3 tcr.py doctor` to inspect the local setup. `doctor --deep` checks
   hashes and imports when deeper diagnosis is needed; it does not install assets.
   If it reports the environment is not installed or unhealthy, hand off to the
-  `tcr-workbench-setup` skill rather than running `setup` from here.
+  `tcr-workbench-setup` skill rather than running `setup` from here. A healthy install
+  that lacks what the requested analysis needs — most often the mouse germlines, which
+  only `setup --species mouse` installs — is the same hand-off: name the missing piece
+  and send the user to that skill. Do not issue `setup` commands from here, including
+  `--reuse-config` and `--core-only` ones, even as a suggestion the user runs.
 - The launcher uses its managed `.tcr/` configuration unless the user supplies
   `--config`, which is a top-level global and must precede the subcommand
   (`tcr.py --config FILE pmhc-score ...`). Honor that choice. Diagnose missing models, references or incompatible
@@ -109,9 +113,14 @@ biological accuracy or absence of training overlap.
   suitable versioned mapping resolves them. Do not invent allele punctuation,
   allele-level calls or class II chain pairing.
 - Human Decoder class II contexts require explicit supported alpha/beta pairs: DR, DQ
-  or DP. DRB alone is not enough for that model context, even if useful in curated
-  reference evidence. Exact sequences/weights must exist in the chosen reference;
-  do not substitute a nearby allele. Class II binding registers are not inferred.
+  or DP. DRB alone is not enough for that model context. Exact sequences/weights must
+  exist in the chosen reference; do not substitute a nearby allele. Class II binding
+  registers are not inferred. Do not supply the missing partner chain yourself, even
+  as a hedged suggestion — ask which alpha allele the donor typing actually reports.
+  When a class II context stays unsupported, say so and **offer `screen` as the next
+  step**: a DRB-only restriction remains useful as curated exact/similarity reference
+  evidence, which needs no model context. Report those model rows as `Unresolved` and
+  route the question to reference evidence rather than declaring the data unusable.
 
 ## Choose execution and precision explicitly
 
