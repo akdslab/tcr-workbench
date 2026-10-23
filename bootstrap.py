@@ -64,6 +64,21 @@ def germline_probe(species):
     )
 
 
+def mouse_germlines_present(settings, env) -> bool:
+    """Report whether the Stitchr mouse germlines are installed.
+
+    Read-only and offline: the mouse probe only stats bundled files. Species is
+    a per-analysis choice and setup always installs the human resources, adding
+    mouse on top, so an absent mouse set is a fact to report rather than an
+    unhealthy install.
+    """
+    try:
+        run([settings["python_executable"], "-c", germline_probe("mouse")], env=env, capture=True)
+    except subprocess.CalledProcessError:
+        return False
+    return True
+
+
 def ensure_germlines(python, species, state, env):
     code = germline_probe(species)
     try:
@@ -401,6 +416,10 @@ def doctor(args, root: Path) -> int:
     probe(settings, env, deep=args.deep)
     print(f"DecoderTCR, registry and human germlines OK: {settings['model']}, {settings['device']}, "
           f"{settings['precision']}." + ("" if args.deep else " Use doctor --deep to verify weights/Metal."))
+    # Reported, never failed: a human-only install is healthy for human analyses.
+    print("Mouse germlines: " + ("installed." if mouse_germlines_present(settings, env) else
+                                 "not installed; each mouse analysis needs them, from "
+                                 "setup --species mouse."))
     print("This checks installation, not biological accuracy. Examples: docs/usage.md")
     return 0
 

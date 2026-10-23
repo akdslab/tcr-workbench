@@ -165,7 +165,8 @@ def test_doctor_never_installs_or_rewrites_configuration(launcher,monkeypatch,ca
     def read_settings(path,*args):
         assert path == cfg
         return dict(decoder_dir=str(root/"decoder"),model="DecoderTCR-ESMC_300M",
-                    device="cpu",precision="float32")
+                    device="cpu",precision="float32",
+                    python_executable=str(module.python_in(root/"decoder")))
     monkeypatch.setattr(bootstrap,"read_settings",read_settings)
     monkeypatch.setattr(bootstrap,"probe",lambda *a,**k:seen.append(k["deep"]))
     monkeypatch.setattr(bootstrap,"ensure_uv",lambda *a:pytest.fail("doctor installed dependencies"))
@@ -596,3 +597,27 @@ def test_deep_cpu_probe_resolves_the_registry_release_identity(launcher,monkeypa
     settings=dict(device="cpu",python_executable="unused",model="DecoderTCR-ESMC_300M",checkpoint=None)
     bootstrap.probe(settings,{},deep=True)
     assert resolved == [bootstrap.MODEL_IDS["DecoderTCR-ESMC_300M"]]
+
+
+@pytest.mark.parametrize("installed",[True,False])
+def test_doctor_reports_mouse_germlines_without_failing_a_human_install(launcher,monkeypatch,capsys,installed):
+    # Species is chosen per analysis and setup always installs the human resources,
+    # so doctor reports the mouse set as present or absent and stays successful
+    # either way. A clean human install must not imply mouse readiness.
+    module,bootstrap,root=launcher
+    core=module.python_in(root/".tcr/envs/core")
+    core.parent.mkdir(parents=True)
+    core.touch()
+    (root/".tcr/runtime.json").write_text("config")
+    def run(command,**kwargs):
+        if len(command) > 2 and "MOUSE" in str(command[2]) and not installed:
+            raise subprocess.CalledProcessError(1,command)
+    monkeypatch.setattr(bootstrap,"run",run)
+    monkeypatch.setattr(bootstrap,"read_settings",lambda *a:dict(
+        decoder_dir=str(root/"decoder"),model="DecoderTCR-ESMC_300M",device="cpu",
+        precision="float32",python_executable=str(module.python_in(root/"decoder"))))
+    monkeypatch.setattr(bootstrap,"probe",lambda *a,**k:None)
+    assert bootstrap.main(["doctor"],root=root) == 0
+    out=capsys.readouterr().out
+    assert ("Mouse germlines: installed." in out) is installed
+    assert ("setup --species mouse" in out) is not installed
