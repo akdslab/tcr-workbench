@@ -206,9 +206,12 @@ interpretation.
 When using `--weight-source registry`, the model package must know where the
 registry is and be able to reach it. `setup --registry <root>` does this; alternatives:
 
-- the env var `DECODERTCR_REGISTRY=/path/to/decodertcr-registry`, or
-- `decodertcr configure --registry /path/to/decodertcr-registry`, or
-- `~/.config/decodertcr-public/config.json`.
+- `DECODERTCR_REGISTRY=/path/to/decodertcr-registry` before running Workbench `setup`, which
+  reads it in place of `--registry`, or
+- `decodertcr configure --registry /path/to/decodertcr-registry` on an existing model
+  environment, or
+- `DECODERTCR_PUBLIC_REGISTRY=/path/to/decodertcr-registry`, which the model package reads for
+  one process.
 
 Then list the inventory to confirm access:
 

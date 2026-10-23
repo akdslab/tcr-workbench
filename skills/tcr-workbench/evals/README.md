@@ -48,11 +48,11 @@ read the expectations it is being graded against.
 Unlike the `tcr-workbench-setup` cases, none of these need particular hardware, installed weights or
 a configured device. Every prompt describes a state the user has already reached — a finished run, a
 report column, an error — so the judgement under test is reachable from the prompt alone, and
-`files` is empty for all ten.
+`files` is empty for all nine.
 
 That is deliberate. These cases test workflow selection and interpretation, not execution, so they
 grade identically on a laptop and on a GPU box. A case that cannot be graded without real data
-belongs in the nightly suite, not here.
+does not belong here.
 
 ## Grading notes
 
