@@ -55,7 +55,7 @@ Linux GPU setup requires a working NVIDIA driver and extra disk space for CUDA d
 | Message or symptom | Action |
 |---|---|
 | Environment missing | Run full `setup --device cpu` or `setup --device apple`; use `setup --core-only` for ordinary reference matching only. |
-| `DecoderTCR` not installed | Rerun full `setup`; it installs `DecoderTCR==1.5.0`. |
+| `DecoderTCR` not installed | Rerun full `setup`; it installs DecoderTCR 1.5.0 from a pinned commit of [akdslab/DecoderTCR](https://github.com/akdslab/DecoderTCR), which needs `git` on `PATH`. |
 | Registry not configured | Run `decodertcr init --registry <root>`, set `DECODERTCR_PUBLIC_REGISTRY`, or rerun Workbench setup with `--registry`. |
 | Weight fetch failed | Check registry access and disk space, then retry; cached artifacts are reused and verified. |
 | Release archived/blocked or needs a newer package | Choose an active release with `decodertcr models --all`, or upgrade `DecoderTCR`. |

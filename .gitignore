@@ -8,3 +8,6 @@ __pycache__/
 
 # Virtual environments
 .venv/
+
+# Generated skill eval results (see skills/*/evals/README.md)
+skills/*-workspace/

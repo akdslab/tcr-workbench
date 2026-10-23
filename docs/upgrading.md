@@ -34,7 +34,7 @@ decodertcr models          # active releases
 decodertcr models --all    # also archived / blocked releases
 ```
 
-You can instead set `DECODERTCR_PUBLIC_REGISTRY` for one process. Workbench setup also accepts `--registry` or `DECODERTCR_REGISTRY` before it creates the model environment. The `esmc-300m`/`esmc-600m`/`esmc-6b` names map to the corresponding `decodertcr@1.5.0` sizes. A release shown only under `--all` as archived or blocked is not usable as-is. A release requiring a newer package than `DecoderTCR==1.5.0` needs a package upgrade, not a metadata edit.
+You can instead set `DECODERTCR_PUBLIC_REGISTRY` for one process. Workbench setup also accepts `--registry` or `DECODERTCR_REGISTRY` before it creates the model environment. The `esmc-300m`/`esmc-600m`/`esmc-6b` names map to the corresponding `decodertcr@1.5.0` sizes. A release shown only under `--all` as archived or blocked is not usable as-is. A release requiring a newer package than the pinned DecoderTCR 1.5.0 commit needs a package upgrade, not a metadata edit.
 
 Weights are verified when first fetched from the registry, so a partial or wrong artifact is rejected. Cached artifacts are reused by release identity; existing results keep their original model details.
 

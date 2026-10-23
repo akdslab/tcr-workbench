@@ -176,6 +176,9 @@ def test_registry_environment_and_output_invalidate_cache(
         "model_sequence_convention": "v2",
     }
     monkeypatch.setattr(p, "_environment_fingerprint", lambda *args: dict(environment))
+    monkeypatch.setattr(p, "_reconstruction_fingerprint", lambda *a: {
+        "reconstruction_contract_version": 2, "reconstruction_identity": {"test": True}
+    })
     calls = []
 
     def fake(source, candidate, temporary, fingerprint, **kwargs):
@@ -343,6 +346,15 @@ def test_environment_checks_package_registry_and_germline_changes(tmp_path, monk
     second = p._environment_fingerprint(tmp_path / "python", tmp_path)
     assert first["germline_sha256"] != second["germline_sha256"]
     assert first["environment_sha256"] == second["environment_sha256"]
+    # The installed commit, not only the release version, identifies the package.
+    metadata.update(decoder_source_url="https://github.com/akdslab/DecoderTCR",
+                    decoder_commit="0" * 40)
+    pinned = p._environment_fingerprint(tmp_path / "python", tmp_path)
+    metadata["decoder_commit"] = "1" * 40
+    other = p._environment_fingerprint(tmp_path / "python", tmp_path)
+    assert pinned["decoder_commit"] == "0" * 40
+    assert pinned["decoder_source_url"] == "https://github.com/akdslab/DecoderTCR"
+    assert pinned["environment_sha256"] != other["environment_sha256"]
     # decodertcr_internal must be installed in the selected environment.
     metadata["decoder_origin"] = None
     with pytest.raises(ValueError, match="not installed"):

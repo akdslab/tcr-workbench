@@ -33,6 +33,7 @@ def fake_runtime(module, root, monkeypatch):
     it to the registry, and probes it.
     """
     calls = []
+    monkeypatch.setattr(module, "check_git", lambda source: None)
     monkeypatch.setattr(module, "ensure_uv", lambda *args: ["uv"])
     monkeypatch.setattr(module, "run", lambda command, **kwargs: calls.append(list(command)))
     monkeypatch.setattr(module, "install_decoder",
@@ -93,6 +94,33 @@ def test_full_setup_requires_a_registry_before_installation(bootstrap, monkeypat
                         "--weight-source", "registry"], root=root) == 1
     assert "registry" in capsys.readouterr().err.lower()
     assert not (root / ".tcr").exists()
+
+
+@pytest.mark.parametrize("failure", ["missing", "stub"])
+def test_git_source_without_working_git_stops_before_installation(bootstrap, monkeypatch, capsys, failure):
+    module, root = bootstrap
+    monkeypatch.setattr(module, "ensure_uv", lambda *args: pytest.fail("installation without git"))
+
+    def git(command, **kwargs):
+        if failure == "missing":
+            raise FileNotFoundError(command[0])
+        # The macOS xcode-select stub exists on PATH but exits nonzero.
+        return subprocess.CompletedProcess(command, 1)
+
+    monkeypatch.setattr(module.subprocess, "run", git)
+    assert module.main(["setup", "--device", "cpu", "--weight-source", "huggingface"], root=root) == 1
+    assert "needs git" in capsys.readouterr().err
+    assert not (root / ".tcr").exists()
+
+
+def test_non_git_source_and_core_only_setup_do_not_require_git(bootstrap, monkeypatch):
+    module, root = bootstrap
+    monkeypatch.setattr(module.subprocess, "run", lambda *args, **kwargs: pytest.fail("git probed"))
+    module.check_git("DecoderTCR @ file:///opt/DecoderTCR")
+    calls = fake_runtime(module, root, monkeypatch)
+    monkeypatch.setattr(module, "check_git", lambda source: pytest.fail("git checked for core-only"))
+    assert module.main(["setup", "--core-only"], root=root) == 0
+    assert calls
 
 
 def test_registry_from_environment_is_accepted(bootstrap, monkeypatch):
