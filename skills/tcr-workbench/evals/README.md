@@ -2,7 +2,11 @@
 
 - These authoring-only cases evaluate the `tcr-workbench` skill.
 - Generated runs belong in a gitignored sibling workspace directory, not in this folder.
-- A host that serves this skill as MCP resources must never publish any file under `evals/`.
+- No file under `evals/` is served. Biohub MCP enforces this in code: its pin covers only files
+  outside `evals/`, its skill resource provider skips `evals/`, and its deployment check fails if a
+  deployed skill lists or serves `evals/evals.json`. Another host must exclude `evals/` the same way.
+- `tests/test_skill_packaging.py` checks the rest of that host's packaging rules here: served files
+  are `.md`, `.txt`, `.py` or `.csv`, and this file's shape matches skill-creator's.
 
 ## What the cases cover
 
