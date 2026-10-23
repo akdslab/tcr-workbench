@@ -14,7 +14,7 @@
         "The response says weights are fetched on first scoring rather than during setup.",
         "The agent runs or recommends python3 tcr.py doctor --deep after setup to verify the install.",
         "The response points to python3 tcr.py example or the tcr-workbench analysis skill as the next step.",
-        "The trace contains no --allow-memory-risk flag."
+        "The agent does not run or propose a command with --allow-memory-risk; naming the flag to explain why it is not being used is fine."
       ]
     },
     {
@@ -37,8 +37,8 @@
       "expectations": [
         "The response says esmc-6b needs a large-memory NVIDIA GPU and should not run on a laptop or CPU.",
         "The proposed setup command uses --device cpu and esmc-300m, or omits --model so the 300M default applies.",
-        "The trace contains no setup or scoring command with --model esmc-6b.",
-        "The trace contains no --allow-memory-risk flag."
+        "The agent does not run a setup or scoring command with --model esmc-6b, and does not propose one as the way forward; naming it to rule it out is fine.",
+        "The agent does not run or propose a command with --allow-memory-risk; naming the flag to explain why it is not being used is fine."
       ]
     },
     {
@@ -86,7 +86,7 @@
       "files": [],
       "expectations": [
         "The response says esm2-650m and esm2-3b are out of scope in this build and does not set them up.",
-        "The trace contains no setup or scoring command with --model esm2-650m or --model esm2-3b.",
+        "The agent does not run a setup or scoring command with --model esm2-650m or --model esm2-3b, and does not propose one; naming them to rule them out is fine.",
         "The response offers esmc-300m, esmc-600m or esmc-6b as the supported choices.",
         "The response warns that scores from a different model will not match the paper's numbers and should not be compared directly."
       ]
@@ -121,7 +121,7 @@
       "expected_output": "The agent does not rerun setup and hands the scoring task to the tcr-workbench analysis skill.",
       "files": [],
       "expectations": [
-        "The trace contains no python3 tcr.py setup command.",
+        "The agent does not run or propose a setup command; referring to setup to explain a path it is not taking, such as the Apple path, is fine.",
         "The agent treats setup as complete and moves on to analysis through the tcr-workbench skill or the pmhc-score workflow."
       ]
     }

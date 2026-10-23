@@ -81,13 +81,16 @@ python3 tcr.py doctor --deep   # also check weight-source reachability and frame
 |---|---|---|
 | Mac with Apple M-series chip | `apple` | MLX/Metal. Requires macOS on Apple Silicon (arm64). HuggingFace or registry. |
 | Linux with a working NVIDIA driver | `gpu` | CUDA. Automatic GPU setup targets Linux only. |
-| Anything else — Intel Mac, Windows, no GPU, unsure | `cpu` | Always works; slower on large models. |
+| Anything else — Intel Mac, no GPU, unsure | `cpu` | Slower on large models. |
+| Windows | `cpu`, **inside WSL/Linux** | Native Windows setup is untested; install WSL first and keep the checkout in the Linux filesystem. |
 | Reference matching only, no model needed | `--core-only` | Installs the core; **no** model/framework/germline install. |
 
 Guardrails the tool enforces (state the fix, don't fight them):
 
 - `--device apple` off Apple Silicon → error; use `--device cpu`.
 - `--device gpu` off Linux → error; on a Mac use `--device apple`.
+- Native Windows is untested; don't talk a user through it. Have them install WSL (Ubuntu) and run
+  setup there, with the checkout inside the Linux filesystem rather than under `/mnt/c/`.
 - `--weight-source huggingface` works with `--device apple` — the MLX bundle is converted from the
   Hub mirror artifact (validated byte-for-byte against the CPU reference for 300M).
 
