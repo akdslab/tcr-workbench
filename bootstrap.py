@@ -238,6 +238,26 @@ def hf_registry_spec(override):
     return f"hf://{repo}/{HF_REGISTRY_PREFIX}"
 
 
+def check_git(source: str):
+    """Fail before installation when a git+ DecoderTCR source has no usable git.
+
+    uv clones git+ sources with the system git; without it the install stops midway
+    with an unclear error. On macOS /usr/bin/git can be the xcode-select stub, which
+    exits nonzero until the Command Line Tools are installed, so run it, not just find it.
+    """
+    if "git+" not in source:
+        return
+    try:
+        working = subprocess.run(["git", "--version"], capture_output=True, timeout=60).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        working = False
+    if not working:
+        raise ValueError("Model setup installs DecoderTCR from GitHub and needs git, which was not found "
+                         "or does not run. Install git (macOS: xcode-select --install; Linux: your "
+                         "package manager) and rerun setup, or pass --decoder-source with a local "
+                         "DecoderTCR checkout. Nothing was installed.")
+
+
 def ensure_uv(state, env):
     python = python_in(state / "bootstrap")
     if not python.is_file():
@@ -318,6 +338,8 @@ def setup(args, root: Path):
         raise ValueError("Model setup requires --registry <root> (shared decodertcr registry) "
                          "or the DECODERTCR_REGISTRY environment variable; or use "
                          "--weight-source huggingface to pull released weights from HuggingFace")
+    if full_setup:
+        check_git(args.decoder_source)
     env = clean_env(state)
     model = SETUP_ALIASES[args.model]
     with setup_lock(state):

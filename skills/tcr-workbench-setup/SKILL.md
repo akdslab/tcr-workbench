@@ -234,10 +234,22 @@ rejected; scoring runs offline once the artifact is cached locally.
 
 ## Behind a corporate / TLS-inspecting proxy (e.g. CZ Biohub)
 
-On a network that inspects TLS (Umbrella/OpenDNS + Palo Alto), the first weight fetch from
-HuggingFace can fail even though the network is fine. Exported environment variables **are inherited
-by the launcher and its workers**, so set the fix and re-run. The fetch happens on first `load`/`score`
-(or when preparing an Apple bundle), not at `setup`, so these apply to the first scoring run too:
+On a network that inspects TLS (Umbrella/OpenDNS + Palo Alto), two fetches can fail even though the
+network is fine: `setup` cloning DecoderTCR from GitHub, and the first weight fetch from HuggingFace.
+Exported environment variables **are inherited by the launcher, uv and the workers**, so set the fix
+and re-run. The weight fetch happens on first `load`/`score` (or when preparing an Apple bundle), not
+at `setup`, so the HuggingFace fixes apply to the first scoring run too:
+
+- **`SSL certificate problem` from git during `setup`** (installing `DecoderTCR @ git+https://…`) —
+  git uses its own trust settings and ignores `SSL_CERT_FILE`/`REQUESTS_CA_BUNDLE`. Build the CA bundle
+  as in the `CERTIFICATE_VERIFY_FAILED` item below, then point git at it for the setup run:
+
+  ```bash
+  export GIT_SSL_CAINFO=/tmp/macos-ca-bundle.pem
+  python3 tcr.py setup --device apple
+  ```
+
+  Never disable verification (`GIT_SSL_NO_VERIFY`, `http.sslVerify false`) to get past it.
 
 - **Xet CDN 403 / connection reset on the weights download.** HuggingFace serves large files over its
   Xet content CDN, which does not survive a TLS-inspecting proxy (and 403s on some private repos
@@ -268,7 +280,7 @@ by the launcher and its workers**, so set the fix and re-run. The fetch happens 
 
 Sanity-check the network outside Python first: `hf auth whoami` (confirms token + connectivity) and
 `curl -sSI https://huggingface.co`. If those work but the Python fetch still fails, it's the CA/Xet
-issue above, not connectivity. Only the first fetch needs the network; scoring runs offline once the
+issue above, not connectivity. After setup, only the first weight fetch needs the network; scoring runs offline once the
 weights are cached under `.tcr/`.
 
 ## Common failures
@@ -284,7 +296,9 @@ weights are cached under `.tcr/`.
 | "DecoderTCR registry is not available: No local registry is configured…" | `--weight-source registry` with no registry configured | `decodertcr configure --registry <root>` / set `DECODERTCR_PUBLIC_REGISTRY` / pass `--registry <root>`, or use `--weight-source huggingface` |
 | "Setup stopped … estimated memory exceeds the available budget" | model too big for RAM/VRAM | smaller model or better hardware; `--allow-memory-risk` only with consent |
 | `ModuleNotFoundError: DecoderTCR` / "decodertcr is not installed" | model package missing from the environment | re-run full `setup` for the device |
-| setup fails installing `DecoderTCR @ git+https://…` | `git` missing, or GitHub unreachable | install `git`, or check network/proxy access to github.com, then re-run `setup` |
+| "Model setup installs DecoderTCR from GitHub and needs git" | `git` missing, or the macOS `xcode-select` stub | install git (macOS: `xcode-select --install`), then re-run `setup` |
+| setup fails installing `DecoderTCR @ git+https://…` with `SSL certificate problem` | TLS-inspecting proxy; git ignores Python's CA variables | `export GIT_SSL_CAINFO=<CA bundle>` — see "Behind a corporate / TLS-inspecting proxy" |
+| setup fails installing `DecoderTCR @ git+https://…` otherwise | GitHub unreachable | check network/proxy access to github.com (`HTTPS_PROXY`), then re-run `setup` |
 | "DecoderTCR <ver> is too old; install >= 1.5.0" | model package below the required version | upgrade the model package |
 | release shows only under `decodertcr models --all` as archived/blocked | that release is not usable as-is | choose an active release (`decodertcr@1.5.0`) |
 | "Setup is needed" / `ModuleNotFoundError` at analysis time | not set up (or core-only, no model) | run `setup` for the device |
