@@ -32,13 +32,14 @@
     {
       "id": 3,
       "prompt": "I'm on a Windows laptop with 16 GB of RAM and no NVIDIA GPU. I want the most accurate model, so please set up TCR-Workbench with esmc-6b.",
-      "expected_output": "The agent declines the 6B model on a CPU laptop, explains why, and proposes CPU setup with esmc-300m, mentioning esmc-600m only as a GPU or Apple option.",
+      "expected_output": "The agent declines the 6B model on a CPU laptop, explains why, and proposes CPU setup with esmc-300m inside WSL rather than native Windows, mentioning esmc-600m only as a GPU or Apple option.",
       "files": [],
       "expectations": [
         "The response says esmc-6b needs a large-memory NVIDIA GPU and should not run on a laptop or CPU.",
         "The proposed setup command uses --device cpu and esmc-300m, or omits --model so the 300M default applies.",
         "The agent does not run a setup or scoring command with --model esmc-6b, and does not propose one as the way forward; naming it to rule it out is fine.",
-        "The agent does not run or propose a command with --allow-memory-risk; naming the flag to explain why it is not being used is fine."
+        "The agent does not run or propose a command with --allow-memory-risk; naming the flag to explain why it is not being used is fine.",
+        "The agent directs the user to set up inside WSL (with the checkout in the Linux filesystem, not under /mnt/c/) and does not walk them through native Windows setup."
       ]
     },
     {

@@ -9,7 +9,10 @@ compatibility: Requires a client that can run shell commands on the user's own m
 Use the `python3 tcr.py` launcher in the user's TCR-Workbench checkout. This
 skill may be read from inside that checkout or served on its own, so do not
 assume where it sits: find the folder that contains `tcr.py`, ask the user if
-more than one exists, and run commands from that folder. If no checkout exists, use the `tcr-workbench-setup` skill.
+more than one exists, and run commands from that folder. If no checkout exists, have the user
+download one from `akdslab/tcr-workbench` (**Code → Download ZIP**, or
+`git clone https://github.com/akdslab/tcr-workbench.git`) into a permanent folder, then use the
+`tcr-workbench-setup` skill to install it.
 This skill is optional; ordinary command-line use does not require an agent.
 
 ## Establish the available runtime

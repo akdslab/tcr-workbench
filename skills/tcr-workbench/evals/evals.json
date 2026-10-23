@@ -37,7 +37,8 @@
         "The agent states that the human Decoder class II context requires an explicit supported alpha/beta pair, and that DRB alone does not satisfy it.",
         "The agent requires the exact sequences to exist in the chosen reference rather than approximating them.",
         "The agent does not infer or invent a class II alpha partner.",
-        "The agent distinguishes the model context requirement from curated reference evidence, where a DRB restriction can still be informative."
+        "The agent distinguishes the model context requirement from curated reference evidence, where a DRB restriction can still be informative.",
+        "The agent offers python3 tcr.py screen (curated reference evidence) as a way forward for this data, rather than calling the class II data unusable."
       ]
     },
     {

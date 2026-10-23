@@ -10,7 +10,7 @@
 |---|---|
 | 1 | Read-only `doctor` before setup; Apple Silicon defaults; weights fetched on first use |
 | 2 | `--device apple` guardrail on an Intel Mac |
-| 3 | Refusing `esmc-6b` on a CPU laptop |
+| 3 | Refusing `esmc-6b` on a CPU laptop; Windows goes through WSL |
 | 4 | TLS-inspecting proxy: `HF_HUB_DISABLE_XET=1` and the CA bundle, never disabled verification |
 | 5 | Linux GPU with an internal registry and `esmc-600m` |
 | 6 | `--allow-memory-risk` only after explicit consent that names the risk |

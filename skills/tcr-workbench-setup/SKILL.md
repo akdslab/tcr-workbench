@@ -26,10 +26,12 @@ This skill covers **agent-ready → scoring-ready**. It assumes the user already
   registry** (an internal artifact directory). Setup installs the model package; weights are then
   pulled from whichever source you choose, on first use.
 
-Getting the checkout onto the machine, and (for the registry path) knowing the registry location,
-are prerequisites **outside** this skill — if a needed one is missing, say which one and ask the
-user who provides it rather than improvising a source. This skill is optional: an ordinary user can
-run the commands below directly.
+If there is no checkout yet, have the user get it from `akdslab/tcr-workbench` (**Code → Download
+ZIP**, or `git clone https://github.com/akdslab/tcr-workbench.git`) into a permanent folder, then
+continue here. Do not send them back to the analysis skill for it. Python, git and (for the registry
+path) the registry location are prerequisites **outside** this skill — if one is missing, say which
+one and ask the user who provides it rather than improvising a source. This skill is optional: an
+ordinary user can run the commands below directly.
 
 ## Mental model
 
