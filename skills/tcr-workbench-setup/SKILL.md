@@ -1,6 +1,7 @@
 ---
 name: tcr-workbench-setup
 description: Install, configure and verify a local TCR-Workbench environment up to the point where analyses can run; not for running or interpreting analyses, which the tcr-workbench skill covers, and not for raw FASTQ assembly. Use when someone wants to install or set up TCR-Workbench on a laptop, Mac, workstation or GPU machine, choose CPU, Apple Silicon or NVIDIA GPU, pick a model size for their hardware, choose whether weights come from HuggingFace or the shared registry, or diagnose why setup, the weights or the model won't run, such as doctor saying it is not set up, decodertcr not being installed, HuggingFace being unreachable, the registry not being configured, or environment, import, TLS, proxy or authentication failures.
+compatibility: Requires a client that can run shell commands on the user's own machine, Python 3.9 or newer and a local TCR-Workbench checkout; model setup also needs git and network access to GitHub and HuggingFace.
 ---
 
 # TCR-Workbench: install and set up

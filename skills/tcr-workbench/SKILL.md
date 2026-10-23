@@ -1,6 +1,7 @@
 ---
 name: tcr-workbench
 description: Run local TCR-Workbench analyses of processed human or mouse alpha-beta TCR data, peptide–MHC predictions, DecoderTCR scores and peptide profiles, with MHC uncertainty and auditable outputs; not for installing or repairing the environment, which the tcr-workbench-setup skill covers, and not for raw FASTQ assembly or clinical antigen identification. Use for workflow selection, execution, interpretation, and the brief check that decides whether setup must be handed off.
+compatibility: Requires a client that can run shell commands on the user's own machine and a local TCR-Workbench checkout; model workflows also need a completed setup, which the tcr-workbench-setup skill covers.
 ---
 
 # TCR-Workbench
