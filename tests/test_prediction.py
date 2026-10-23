@@ -176,6 +176,9 @@ def test_registry_environment_and_output_invalidate_cache(
         "model_sequence_convention": "v2",
     }
     monkeypatch.setattr(p, "_environment_fingerprint", lambda *args: dict(environment))
+    monkeypatch.setattr(p, "_reconstruction_fingerprint", lambda *a: {
+        "reconstruction_contract_version": 2, "reconstruction_identity": {"test": True}
+    })
     calls = []
 
     def fake(source, candidate, temporary, fingerprint, **kwargs):
