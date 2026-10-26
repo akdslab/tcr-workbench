@@ -1,15 +1,7 @@
 ---
 name: tcr-workbench-setup
-description: >-
-  Install and verify a local TCR-Workbench environment so a bench scientist can score TCR-pMHC
-  data. Use when the user wants to install TCR-Workbench, set it up on their laptop or
-  workstation, choose where model weights come from (HuggingFace or the shared registry), choose
-  CPU / Apple Silicon / NVIDIA GPU or a model size, or diagnose why setup, the weights, or the model
-  won't run. Triggers: "install tcr-workbench", "set it up", "run on my laptop / Mac / GPU",
-  "pull weights from HuggingFace", "configure the registry", "which model for my hardware", "doctor
-  says it's not set up", "decodertcr not installed / can't reach HuggingFace / registry not
-  configured", environment/import/auth failures. NOT for analysis (see the tcr-workbench skill) or
-  raw FASTQ assembly.
+description: Install, configure and verify a local TCR-Workbench environment up to the point where analyses can run; not for running or interpreting analyses, which the tcr-workbench skill covers, and not for raw FASTQ assembly. Use when someone wants to install or set up TCR-Workbench on a laptop, Mac, workstation or GPU machine, choose CPU, Apple Silicon or NVIDIA GPU, pick a model size for their hardware, choose whether weights come from HuggingFace or the shared registry, or diagnose why setup, the weights or the model won't run, such as doctor saying it is not set up, decodertcr not being installed, HuggingFace being unreachable, the registry not being configured, or environment, import, TLS, proxy or authentication failures.
+compatibility: Requires a client that can run shell commands on the user's own machine, Python 3.9 or newer and a local TCR-Workbench checkout; model setup also needs git and network access to GitHub and HuggingFace.
 ---
 
 # TCR-Workbench: install and set up
@@ -25,23 +17,27 @@ This skill covers **agent-ready → scoring-ready**. It assumes the user already
 
 - a local machine with **Python 3.9+** (the launcher needs 3.9+; setup then provisions its own
   Python 3.12 in a managed environment — `DecoderTCR` is Python 3.12 only), and
+- **`git` on `PATH`** for model setup, which installs `DecoderTCR` from a pinned commit of its
+  public GitHub repository (it is not on PyPI); `--core-only` does not need it, and
 - the TCR-Workbench checkout on disk (from `git clone` or **Code → Download ZIP** on
-  `akds/tcr-workbench`), and
+  `akdslab/tcr-workbench`), and
 - **a way to obtain the weights** — either **internet access to HuggingFace** (the default; a public
   model repo needs no login, a private/gated one needs a token) **or read access to a shared model
   registry** (an internal artifact directory). Setup installs the model package; weights are then
   pulled from whichever source you choose, on first use.
 
-Getting the checkout onto the machine, and (for the registry path) knowing the registry location,
-are prerequisites **outside** this skill — if a needed one is missing, point them to the onboarding
-doc rather than improvising. This skill is optional: an ordinary user can run the commands below
-directly.
+If there is no checkout yet, have the user get it from `akdslab/tcr-workbench` (**Code → Download
+ZIP**, or `git clone https://github.com/akdslab/tcr-workbench.git`) into a permanent folder, then
+continue here. Do not send them back to the analysis skill for it. Python, git and (for the registry
+path) the registry location are prerequisites **outside** this skill — if one is missing, say which
+one and ask the user who provides it rather than improvising a source. This skill is optional: an
+ordinary user can run the commands below directly.
 
 ## Mental model
 
 Everything runs through the repository launcher: **`python3 tcr.py`**. It creates and owns a
 managed `.tcr/` environment (its own Python 3.12, model runtime, germlines). The model *code* is the
-**`DecoderTCR`** package (`1.5.0`); the model *weights* come from one of two sources:
+**`DecoderTCR`** package (`1.5.0`, installed from a pinned commit of `akdslab/DecoderTCR`); the model *weights* come from one of two sources:
 
 - **HuggingFace (default when no registry is configured).** Setup records the Hub registry mirror it
   will use (default `hf://Decoder-CHI/DecoderTCR-staging/registry`); weights are resolved by exact
@@ -87,13 +83,16 @@ python3 tcr.py doctor --deep   # also check weight-source reachability and frame
 |---|---|---|
 | Mac with Apple M-series chip | `apple` | MLX/Metal. Requires macOS on Apple Silicon (arm64). HuggingFace or registry. |
 | Linux with a working NVIDIA driver | `gpu` | CUDA. Automatic GPU setup targets Linux only. |
-| Anything else — Intel Mac, Windows, no GPU, unsure | `cpu` | Always works; slower on large models. |
+| Anything else — Intel Mac, no GPU, unsure | `cpu` | Slower on large models. |
+| Windows | `cpu`, **inside WSL/Linux** | Native Windows setup is untested; install WSL first and keep the checkout in the Linux filesystem. |
 | Reference matching only, no model needed | `--core-only` | Installs the core; **no** model/framework/germline install. |
 
 Guardrails the tool enforces (state the fix, don't fight them):
 
 - `--device apple` off Apple Silicon → error; use `--device cpu`.
 - `--device gpu` off Linux → error; on a Mac use `--device apple`.
+- Native Windows is untested; don't talk a user through it. Have them install WSL (Ubuntu) and run
+  setup there, with the checkout inside the Linux filesystem rather than under `/mnt/c/`.
 - `--weight-source huggingface` works with `--device apple` — the MLX bundle is converted from the
   Hub mirror artifact (validated byte-for-byte against the CPU reference for 300M).
 
@@ -142,7 +141,7 @@ this build** — do not offer them. Default is `esmc-300m`.
 
 ## Step 5 — run setup
 
-Setup installs dependencies and `DecoderTCR==1.5.0` into the managed environment, then
+Setup installs dependencies and `DecoderTCR` 1.5.0 (a pinned GitHub commit) into the managed environment, then
 records the weight source. There is no large download during setup — weights arrive on first use.
 
 ```bash
@@ -183,7 +182,8 @@ python3 tcr.py doctor --deep
 ```
 
 Expect it to report the installed device, model, precision, and a reachable weight source — either
-`HuggingFace source OK: <repo> <commit> …` or a reachable registry — plus healthy framework imports.
+`HuggingFace registry OK: <hf://repo/prefix> <model_id> <convention> <sha256…>` or a reachable
+registry (`Registry release OK: …`) — plus healthy framework imports.
 If it passes, setup is done; weights are pulled on first scoring.
 
 ## Step 7 — first run / hand-off
@@ -204,19 +204,22 @@ interpretation.
 - **Where weights live:** the launcher sets `HF_HUB_CACHE` under `.tcr/envs/model/hf-cache`, so
   downloads persist with the project. If the environment is ephemeral (a sandbox that resets),
   keeping `.tcr/` avoids re-downloading; otherwise first scoring re-fetches the weights.
-- **Provenance:** each run records `weight_source`, `hf_repo`, the resolved repo-head commit and the
-  catalog/manifest/artifact sha256 in the output manifest — use these to confirm which weights
-  produced a result. The Hub registry always pins the current repo head commit, so there is no
-  manual revision flag.
+- **Provenance:** each run records `weight_source`, `hf_registry`, `hf_repo`, the model and
+  `model_id`, and the catalog/manifest/artifact sha256 in the output manifest — use these to
+  confirm which weights produced a result. No Hub commit is recorded; the member is pinned by its
+  manifest sha256 and size, and there is no manual revision flag.
 
 ## Registry configuration and access (internal)
 
 When using `--weight-source registry`, the model package must know where the
 registry is and be able to reach it. `setup --registry <root>` does this; alternatives:
 
-- the env var `DECODERTCR_REGISTRY=/path/to/decodertcr-registry`, or
-- `decodertcr configure --registry /path/to/decodertcr-registry`, or
-- `~/.config/decodertcr-public/config.json`.
+- `DECODERTCR_REGISTRY=/path/to/decodertcr-registry` before running Workbench `setup`, which
+  reads it in place of `--registry`, or
+- `decodertcr configure --registry /path/to/decodertcr-registry` on an existing model
+  environment, or
+- `DECODERTCR_PUBLIC_REGISTRY=/path/to/decodertcr-registry`, which the model package reads for
+  one process.
 
 Then list the inventory to confirm access:
 
@@ -226,17 +229,29 @@ decodertcr models --all    # also archived / blocked releases
 ```
 
 If a release appears only under `--all` as archived or blocked, it is not usable as-is — choose an
-active release (`decodertcr@1.5.0`). `DecoderTCR==1.5.0` resolves the released
+active release (`decodertcr@1.5.0`). The pinned `DecoderTCR` 1.5.0 package resolves the released
 `decodertcr@1.5.0` checkpoints; if a release needs a newer package, upgrade the package rather than
 editing metadata. Weights are verified when first fetched, so a partial or wrong artifact is
 rejected; scoring runs offline once the artifact is cached locally.
 
 ## Behind a corporate / TLS-inspecting proxy (e.g. CZ Biohub)
 
-On a network that inspects TLS (Umbrella/OpenDNS + Palo Alto), the first weight fetch from
-HuggingFace can fail even though the network is fine. Exported environment variables **are inherited
-by the launcher and its workers**, so set the fix and re-run. The fetch happens on first `load`/`score`
-(or when preparing an Apple bundle), not at `setup`, so these apply to the first scoring run too:
+On a network that inspects TLS (Umbrella/OpenDNS + Palo Alto), two fetches can fail even though the
+network is fine: `setup` cloning DecoderTCR from GitHub, and the first weight fetch from HuggingFace.
+Exported environment variables **are inherited by the launcher, uv and the workers**, so set the fix
+and re-run. The weight fetch happens on first `load`/`score` (or when preparing an Apple bundle), not
+at `setup`, so the HuggingFace fixes apply to the first scoring run too:
+
+- **`SSL certificate problem` from git during `setup`** (installing `DecoderTCR @ git+https://…`) —
+  git uses its own trust settings and ignores `SSL_CERT_FILE`/`REQUESTS_CA_BUNDLE`. Build the CA bundle
+  as in the `CERTIFICATE_VERIFY_FAILED` item below, then point git at it for the setup run:
+
+  ```bash
+  export GIT_SSL_CAINFO=/tmp/macos-ca-bundle.pem
+  python3 tcr.py setup --device apple
+  ```
+
+  Never disable verification (`GIT_SSL_NO_VERIFY`, `http.sslVerify false`) to get past it.
 
 - **Xet CDN 403 / connection reset on the weights download.** HuggingFace serves large files over its
   Xet content CDN, which does not survive a TLS-inspecting proxy (and 403s on some private repos
@@ -267,7 +282,7 @@ by the launcher and its workers**, so set the fix and re-run. The fetch happens 
 
 Sanity-check the network outside Python first: `hf auth whoami` (confirms token + connectivity) and
 `curl -sSI https://huggingface.co`. If those work but the Python fetch still fails, it's the CA/Xet
-issue above, not connectivity. Only the first fetch needs the network; scoring runs offline once the
+issue above, not connectivity. After setup, only the first weight fetch needs the network; scoring runs offline once the
 weights are cached under `.tcr/`.
 
 ## Common failures
@@ -283,6 +298,9 @@ weights are cached under `.tcr/`.
 | "DecoderTCR registry is not available: No local registry is configured…" | `--weight-source registry` with no registry configured | `decodertcr configure --registry <root>` / set `DECODERTCR_PUBLIC_REGISTRY` / pass `--registry <root>`, or use `--weight-source huggingface` |
 | "Setup stopped … estimated memory exceeds the available budget" | model too big for RAM/VRAM | smaller model or better hardware; `--allow-memory-risk` only with consent |
 | `ModuleNotFoundError: DecoderTCR` / "decodertcr is not installed" | model package missing from the environment | re-run full `setup` for the device |
+| "Model setup installs DecoderTCR from GitHub and needs git" | `git` missing, or the macOS `xcode-select` stub | install git (macOS: `xcode-select --install`), then re-run `setup` |
+| setup fails installing `DecoderTCR @ git+https://…` with `SSL certificate problem` | TLS-inspecting proxy; git ignores Python's CA variables | `export GIT_SSL_CAINFO=<CA bundle>` — see "Behind a corporate / TLS-inspecting proxy" |
+| setup fails installing `DecoderTCR @ git+https://…` otherwise | GitHub unreachable | check network/proxy access to github.com (`HTTPS_PROXY`), then re-run `setup` |
 | "DecoderTCR <ver> is too old; install >= 1.5.0" | model package below the required version | upgrade the model package |
 | release shows only under `decodertcr models --all` as archived/blocked | that release is not usable as-is | choose an active release (`decodertcr@1.5.0`) |
 | "Setup is needed" / `ModuleNotFoundError` at analysis time | not set up (or core-only, no model) | run `setup` for the device |

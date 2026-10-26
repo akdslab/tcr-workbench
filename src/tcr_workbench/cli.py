@@ -20,7 +20,7 @@ from .report import (manifest, output_bundle, sha256_file, snapshot_inputs, writ
 def _decoder_options(command):
     command.add_argument("--decoder-dir", type=Path)
     command.add_argument("--python", dest="python_executable")
-    command.add_argument("--model", help="esmc-300m, esmc-600m, esmc-6b, esm2-650m, or esm2-3b")
+    command.add_argument("--model", help="esmc-300m, esmc-600m, or esmc-6b")
     command.add_argument("--precision", choices=("float32", "float16"),
                          help="float32 default; float16 is approximate Apple ESM-C 300M inference")
     command.add_argument("--device", help="cpu, gpu/cuda[:N], or apple (MLX Metal)")

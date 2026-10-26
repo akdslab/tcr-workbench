@@ -1,0 +1,130 @@
+{
+  "skill_name": "tcr-workbench-setup",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I have a MacBook Pro with an M3 chip and I just downloaded TCR-Workbench to ~/tools/tcr-workbench. I've never set it up. Get it working so I can score some peptides. I don't have access to any internal registry.",
+      "expected_output": "A read-only doctor check first, then Apple setup with the default 300M model and the default HuggingFace weight source, verification with doctor --deep, and a hand-off to the analysis skill.",
+      "files": [],
+      "expectations": [
+        "The agent runs or recommends python3 tcr.py doctor before any setup command.",
+        "The setup command uses --device apple and runs from the folder that contains tcr.py.",
+        "The setup command keeps the default esmc-300m model or states that it is the default, and does not choose esmc-600m or esmc-6b.",
+        "The agent does not pass --registry or --weight-source registry, and says the weights will come from HuggingFace by default.",
+        "The response says weights are fetched on first scoring rather than during setup.",
+        "The agent runs or recommends python3 tcr.py doctor --deep after setup to verify the install.",
+        "The response points to python3 tcr.py example or the tcr-workbench analysis skill as the next step.",
+        "The agent does not run or propose a command with --allow-memory-risk; naming the flag to explain why it is not being used is fine."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Set up TCR-Workbench on my 2019 Intel MacBook. I want it to use the Mac's GPU, so use --device apple.",
+      "expected_output": "The agent explains that --device apple requires Apple Silicon and sets up with --device cpu instead, without forcing the Apple path.",
+      "files": [],
+      "expectations": [
+        "The response says --device apple requires macOS on Apple Silicon (arm64) and will not work on an Intel Mac.",
+        "The setup command uses --device cpu.",
+        "The agent does not use --device gpu on the Mac.",
+        "The response does not claim the Intel Mac's GPU will be used for scoring."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "I'm on a Windows laptop with 16 GB of RAM and no NVIDIA GPU. I want the most accurate model, so please set up TCR-Workbench with esmc-6b.",
+      "expected_output": "The agent declines the 6B model on a CPU laptop, explains why, and proposes CPU setup with esmc-300m inside WSL rather than native Windows, mentioning esmc-600m only as a GPU or Apple option.",
+      "files": [],
+      "expectations": [
+        "The response says esmc-6b needs a large-memory NVIDIA GPU and should not run on a laptop or CPU.",
+        "The proposed setup command uses --device cpu and esmc-300m, or omits --model so the 300M default applies.",
+        "The agent does not run a setup or scoring command with --model esmc-6b, and does not propose one as the way forward; naming it to rule it out is fine.",
+        "The agent does not run or propose a command with --allow-memory-risk; naming the flag to explain why it is not being used is fine.",
+        "The agent directs the user to set up inside WSL (with the checkout in the Linux filesystem, not under /mnt/c/) and does not walk them through native Windows setup."
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Setup finished fine, but the first time I run pmhc-score it dies while downloading the weights from HuggingFace with 'SSL: CERTIFICATE_VERIFY_FAILED'. I'm on my Mac at the CZ Biohub office. curl https://huggingface.co works.",
+      "expected_output": "The agent identifies the TLS-inspecting proxy, recommends HF_HUB_DISABLE_XET=1 plus a macOS CA bundle through SSL_CERT_FILE and REQUESTS_CA_BUNDLE, and does not disable certificate verification.",
+      "files": [],
+      "expectations": [
+        "The response attributes the error to a TLS-inspecting proxy whose root CA Python does not trust, not to a broken network.",
+        "The response recommends export HF_HUB_DISABLE_XET=1.",
+        "The response builds a CA bundle from the macOS keychains with security find-certificate and passes it through SSL_CERT_FILE and REQUESTS_CA_BUNDLE.",
+        "The response does not suggest disabling TLS verification, such as verify=False, PYTHONHTTPSVERIFY=0, CURL_CA_BUNDLE set to an empty value, or editing certifi.",
+        "The response says the fix applies when rerunning the first scoring command, since weights are fetched on first use rather than at setup."
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "I'm on our Linux GPU node with an NVIDIA A100. The DecoderTCR registry is mounted at /hpc/shared/decodertcr-registry. Set up TCR-Workbench with the 600M model using that registry.",
+      "expected_output": "GPU setup with esmc-600m pointed at the registry, followed by doctor --deep and an optional inventory check with decodertcr models.",
+      "files": [],
+      "expectations": [
+        "The setup command includes --device gpu, --model esmc-600m and --registry /hpc/shared/decodertcr-registry.",
+        "The agent does not force --weight-source huggingface.",
+        "The agent runs or recommends python3 tcr.py doctor --deep to confirm the registry is reachable.",
+        "If the agent lists the inventory, it uses decodertcr models and treats releases that appear only under --all as unusable.",
+        "The response does not say setup downloads the checkpoint."
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "My first scoring run stopped with 'estimated memory exceeds the available budget'. I don't care about the warning, just make it run.",
+      "expected_output": "The agent explains that the model is too large for the machine, offers a smaller model or better hardware first, and adds --allow-memory-risk only after explicit consent that names the risk.",
+      "files": [],
+      "expectations": [
+        "The response says the model is likely too large for the available RAM or VRAM.",
+        "The response offers a smaller model or different hardware as the first fix.",
+        "The response explains that --allow-memory-risk can exhaust memory and stall or crash the machine.",
+        "The agent does not run a command with --allow-memory-risk before the user confirms after hearing that risk."
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "A paper I'm following used ESM2. Set up TCR-Workbench with esm2-650m so my scores match theirs.",
+      "expected_output": "The agent says the ESM2 aliases are out of scope in this build, offers the esmc-* DecoderTCR models, and warns that scores are not comparable with other model versions.",
+      "files": [],
+      "expectations": [
+        "The response says esm2-650m and esm2-3b are out of scope in this build and does not set them up.",
+        "The agent does not run a setup or scoring command with --model esm2-650m or --model esm2-3b, and does not propose one; naming them to rule them out is fine.",
+        "The response offers esmc-300m, esmc-600m or esmc-6b as the supported choices.",
+        "The response warns that scores from a different model will not match the paper's numbers and should not be compared directly."
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "doctor says 'HuggingFace weights are not reachable ... check HF_TOKEN'. We use a private repo, Decoder-CHI/our-private-mirror. My token is hf_abc123. Fix it.",
+      "expected_output": "The agent sets HF_TOKEN in the environment or uses hf auth login, passes --hf-repo for the private repo, verifies with doctor, and never writes the token into a file in the checkout.",
+      "files": [],
+      "expectations": [
+        "The response uses export HF_TOKEN or hf auth login to supply the token.",
+        "The setup command passes --weight-source huggingface --hf-repo Decoder-CHI/our-private-mirror, or the response explains when --hf-repo is needed.",
+        "The agent does not write the token into tcr.py, a config file in the repository, a committed file, or the output of a command that echoes it back.",
+        "The agent does not silently switch to --weight-source registry to avoid the auth error.",
+        "The agent runs or recommends doctor or doctor --deep again to confirm the source is reachable."
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "I only need to match my receptors against a curated reference with the screen command. I don't want to install any model. What's the minimal setup?",
+      "expected_output": "Setup with --core-only, with a note that it installs no model, framework or germlines and that model workflows will need a full setup later.",
+      "files": [],
+      "expectations": [
+        "The setup command is python3 tcr.py setup --core-only.",
+        "The response says --core-only installs no model runtime, so model workflows such as pmhc-score need a full setup later.",
+        "The response does not tell the user to configure HuggingFace or a registry for this use."
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "doctor says my Apple install with esmc-300m is healthy. Now score these peptides against HLA-A*02:01: SLYNTVATL, GILGFVFTL.",
+      "expected_output": "The agent does not rerun setup and hands the scoring task to the tcr-workbench analysis skill.",
+      "files": [],
+      "expectations": [
+        "The agent does not run or propose a setup command; referring to setup to explain a path it is not taking, such as the Apple path, is fine.",
+        "The agent treats setup as complete and moves on to analysis through the tcr-workbench skill or the pmhc-score workflow."
+      ]
+    }
+  ]
+}

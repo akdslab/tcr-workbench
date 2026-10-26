@@ -6,7 +6,7 @@ Already installed? Go to [the first profile](#4-generate-your-first-hla-only-pep
 
 ## 1. Download and open the folder
 
-On [akds/tcr-workbench](https://github.com/akds/tcr-workbench), choose **Code → Download ZIP** and extract it. Choose a permanent location before setup. Open Terminal and enter the folder:
+On [akdslab/tcr-workbench](https://github.com/akdslab/tcr-workbench), choose **Code → Download ZIP** and extract it. Choose a permanent location before setup. Open Terminal and enter the folder:
 
 ```sh
 cd ~/Downloads/tcr-workbench-main

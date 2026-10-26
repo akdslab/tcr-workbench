@@ -1,14 +1,18 @@
 ---
 name: tcr-workbench
-description: Run local TCR-Workbench analyses of processed human or mouse alpha-beta TCR data, peptide–MHC predictions, DecoderTCR scores and peptide profiles, with MHC uncertainty and auditable outputs. Use for workflow selection, setup diagnosis, execution and interpretation; not raw FASTQ assembly or clinical antigen identification.
+description: Run local TCR-Workbench analyses of processed human or mouse alpha-beta TCR data, peptide–MHC predictions, DecoderTCR scores and peptide profiles, with MHC uncertainty and auditable outputs; not for installing or repairing the environment, which the tcr-workbench-setup skill covers, and not for raw FASTQ assembly or clinical antigen identification. Use for workflow selection, execution, interpretation, and the brief check that decides whether setup must be handed off.
+compatibility: Requires a client that can run shell commands on the user's own machine and a local TCR-Workbench checkout; model workflows also need a completed setup, which the tcr-workbench-setup skill covers.
 ---
 
 # TCR-Workbench
 
-Use the repository's `python3 tcr.py` launcher. The bundled location is
-`skills/tcr-workbench/`; the repository root is two directories above that skill
-folder. Confirm `tcr.py` exists and run commands from its directory. If the skill
-has been copied elsewhere, locate the user's checkout instead of inventing a path.
+Use the `python3 tcr.py` launcher in the user's TCR-Workbench checkout. This
+skill may be read from inside that checkout or served on its own, so do not
+assume where it sits: find the folder that contains `tcr.py`, ask the user if
+more than one exists, and run commands from that folder. If no checkout exists, have the user
+download one from `akdslab/tcr-workbench` (**Code → Download ZIP**, or
+`git clone https://github.com/akdslab/tcr-workbench.git`) into a permanent folder, then use the
+`tcr-workbench-setup` skill to install it.
 This skill is optional; ordinary command-line use does not require an agent.
 
 ## Establish the available runtime
@@ -23,9 +27,14 @@ This skill is optional; ordinary command-line use does not require an agent.
 - Run `python3 tcr.py doctor` to inspect the local setup. `doctor --deep` checks
   hashes and imports when deeper diagnosis is needed; it does not install assets.
   If it reports the environment is not installed or unhealthy, hand off to the
-  `tcr-workbench-setup` skill rather than running `setup` from here.
+  `tcr-workbench-setup` skill rather than running `setup` from here. A healthy install
+  that lacks what the requested analysis needs — most often the mouse germlines, which
+  only `setup --species mouse` installs — is the same hand-off: name the missing piece
+  and send the user to that skill. Do not issue `setup` commands from here, including
+  `--reuse-config` and `--core-only` ones, even as a suggestion the user runs.
 - The launcher uses its managed `.tcr/` configuration unless the user supplies
-  `--config`. Honor that choice. Diagnose missing models, references or incompatible
+  `--config`, which is a top-level global and must precede the subcommand
+  (`tcr.py --config FILE pmhc-score ...`). Honor that choice. Diagnose missing models, references or incompatible
   environments before starting an expensive run; do not silently switch devices.
 - For new local checkpoints, inspect `prepare-model --help`. The launcher runs
   cached compatibility checks before model workflows and converts supported Apple
@@ -46,7 +55,7 @@ This skill is optional; ordinary command-line use does not require an agent.
 | Score peptides in an HLA context with DecoderTCR | `pmhc-score` | Uncalibrated model PLL, not affinity or binding probability |
 | Generate a model peptide profile for HLA | `pmhc-profile` | Conditional amino-acid preferences for one HLA and length |
 | Score a specified paired TCR with peptide–MHC | `tcr-score` | DecoderTCR PLL for the supplied receptor/context |
-| Generate a TCR-conditioned peptide profile | `tcr-profile` | Conditional marginals/PSSM, not a demonstrated binding motif |
+| Generate a TCR-conditioned peptide profile | `tcr-profile` (alias of `decoder-profile`, whose name its `--help` prints) | Conditional marginals/PSSM, not a demonstrated binding motif |
 | Screen processed receptors against a supplied panel | `repertoire-score` | Model hypotheses plus retained cell/chain audits |
 | Find curated exact/similar receptor evidence | `screen` | Reference matching with source evidence and HLA checks |
 | Describe a supplied peptide set | `profile` | Empirical frequencies/PSSM, distinct from model marginals |
@@ -62,13 +71,30 @@ biological accuracy or absence of training overlap.
 ## Preserve the biological contracts
 
 - Use explicit `--species mouse` for mouse inputs; human is the default. Setup
-  with `--species mouse` installs mouse germlines. The bundled mouse MHC reference
-  contains exact H-2-Kb, H-2-Db, H-2-IAb and H-2-IAk mature chains; other supported
-  names require a versioned `--mhc-reference` file. Inspect the schema in
-  `docs/input-formats.md`; never substitute human HLA or human germlines.
-  Species support and successful execution do not establish a checkpoint's
-  training coverage or predictive accuracy. Future mouse-trained checkpoints
-  still need their own identity, compatibility checks and experimental validation.
+  with `--species mouse` installs mouse germlines. Split mixed-species inputs into
+  separate runs with their matching gene calls; human `HLA-` and mouse `H-2-` names
+  share the `hla` column and `--hla` flag. Never substitute human HLA or human
+  germlines. Species support and successful execution do not establish a
+  checkpoint's training coverage or predictive accuracy. Future mouse-trained
+  checkpoints still need their own identity, compatibility checks and experimental
+  validation.
+- The bundled mouse MHC reference contains exact H-2-Kb, H-2-Db, H-2-IAb and H-2-IAk
+  mature chains: class I supplies the mature heavy chain with mouse beta-2
+  microglobulin, class II the explicit I-A alpha and beta chains. Mouse class II
+  needs the complete molecule name; partners are not inferred and cross-species
+  names are rejected. Other supported names require a versioned `--mhc-reference`
+  file, which **replaces the whole reference** with no fallback to bundled entries.
+  That flag exists only on the model-scoring commands — `repertoire-score`,
+  `pmhc-score`, `pmhc-profile`, `tcr-score`, `tcr-profile` and `decoder-run`;
+  `screen`, `validate` and `decoder-export` accept `--species` alone, so a
+  non-bundled molecule cannot be introduced through them.
+  Such a file requires `schema_version: 1`, `species: "mouse"`, a nonempty `source`,
+  and a `molecules` object keyed by exact canonical H-2 names; each molecule carries
+  `class` (`"I"` or `"II"`), `HLA_a`, `HLA_b` and its own `source`, with both chains
+  holding 50–600 canonical amino acids. Record accessions, sequence versions and
+  residue ranges in `source`. Never include signal peptides or substitute human
+  beta-2 microglobulin, and never download a missing sequence — analysis fetches
+  none.
 - Accept processed Cell Ranger V(D)J annotations, AIRR rearrangement TSVs or paired
   receptor tables. Paired inputs use `cell_id,cdr3a,cdr3b`; supply `donor_id` in
   the table or via `--donor-id`. Decoder reconstruction also needs V/J gene calls.
@@ -90,9 +116,14 @@ biological accuracy or absence of training overlap.
   suitable versioned mapping resolves them. Do not invent allele punctuation,
   allele-level calls or class II chain pairing.
 - Human Decoder class II contexts require explicit supported alpha/beta pairs: DR, DQ
-  or DP. DRB alone is not enough for that model context, even if useful in curated
-  reference evidence. Exact sequences/weights must exist in the chosen reference;
-  do not substitute a nearby allele. Class II binding registers are not inferred.
+  or DP. DRB alone is not enough for that model context. Exact sequences/weights must
+  exist in the chosen reference; do not substitute a nearby allele. Class II binding
+  registers are not inferred. Do not supply the missing partner chain yourself, even
+  as a hedged suggestion — ask which alpha allele the donor typing actually reports.
+  When a class II context stays unsupported, say so and **offer `screen` as the next
+  step**: a DRB-only restriction remains useful as curated exact/similarity reference
+  evidence, which needs no model context. Report those model rows as `Unresolved` and
+  route the question to reference evidence rather than declaring the data unusable.
 
 ## Choose execution and precision explicitly
 
@@ -130,11 +161,14 @@ a calibrated workflow ETA. Elapsed worker heartbeats are not percentages.
 
 ## Run and report auditable analyses
 
-Use fresh output paths. Keep existing completed analyses and raw inputs intact;
-do not use `--force` merely to bypass a stale-output or hash error. Resolve the
-input/configuration mismatch, or explicitly replace outputs only within the
-user's authorized scope. Bound panel size, batching and threads using the actual
-command's supported options; do not expand a panel into an unrestricted search.
+Use fresh output paths. Analysis commands never overwrite an existing output
+directory and offer no override for it: a collision fails with `Output already
+exists`, and the fix is a new `--out`. (`--force` exists only on `configure` and
+`decoder-run`, and is not an answer to a collision.) Keep existing completed
+analyses and raw inputs intact; resolve an input/configuration mismatch rather
+than relocating around it, and replace outputs only within the user's authorized
+scope. Bound panel size, batching and threads using the actual command's
+supported options; do not expand a panel into an unrestricted search.
 
 Inspect result tables, QC/skipped-row reasons and manifests, not only the HTML
 preview. Report scored and unresolved counts, model/reference versions, device,

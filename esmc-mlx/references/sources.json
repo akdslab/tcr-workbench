@@ -4,5 +4,6 @@
   "decoder_source": {"url": "https://github.com/Biohub/DecoderTCR", "revision": "3e3d9889d26d79635f674940ddab039c4dc6f9f9"},
   "decoder_checkpoint": {"repo": "biohub/DecoderTCR", "revision": "803fed3bbf3dcc40ed481f7d50a20f668db0ef01", "file": "DecoderTCR-ESMC-V0.3/300M.ckpt", "sha256": "18d47c169d0ce992152838b8229e1c682b0a681f55057b471dcdcbf07d2fcad9", "source_tensors": 308, "converted_tensors": 308, "parameters": 332997184, "safe_load": "torch.load(weights_only=True,mmap=True,map_location='cpu')"},
   "mlx_lm_reference": {"url": "https://github.com/ml-explore/mlx-lm/pull/1484", "revision": "c26b9af872158d822a8c95589708eedd3b9c0831"},
+  "decoder_source_scope": "decoder_source is the DecoderTCR revision this MLX adapter was derived from and checked against. It is not the package that setup installs: bootstrap.DECODER_COMMIT pins akdslab/DecoderTCR, whose history does not contain this revision. Run manifests record the installed package as decoder_source_url and decoder_commit.",
   "normalization_bias_audit": "Both actual checkpoints have nonzero input and post-attention LayerNorm biases in all 30 layers; all are retained. Q/K and final LayerNorm have no bias tensors."
 }

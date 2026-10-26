@@ -853,6 +853,17 @@ if spec is None:
     print(json.dumps(result)); sys.exit(0)
 dt = importlib.import_module('DecoderTCR')
 result['decoder_version'] = getattr(dt, '__version__', None)
+# A git or local install keeps its exact source in PEP 610 direct_url.json; the
+# version string alone does not distinguish commits of the same release.
+try:
+    direct = json.loads(metadata.distribution('DecoderTCR').read_text('direct_url.json') or 'null')
+except Exception:
+    direct = None
+if isinstance(direct, dict):
+    result['decoder_source_url'] = direct.get('url')
+    vcs = direct.get('vcs_info')
+    if isinstance(vcs, dict) and vcs.get('commit_id'):
+        result['decoder_commit'] = vcs['commit_id']
 germline_roots = []
 for name in ('Stitchr', 'stitchr'):
     package = importlib.util.find_spec(name)
@@ -944,8 +955,8 @@ print(json.dumps(result))
     identity = {"environment_sha256": environment, "germline_sha256": germlines.hexdigest(),
                 "decoder_version": version, "decoder_origin": info["decoder_origin"],
                 "registry_root": info.get("registry_root", "")}
-    for key in ("catalog_sha256", "artifact_sha256", "manifest_sha256",
-                "model_sequence_convention", "hf_registry"):
+    for key in ("decoder_source_url", "decoder_commit", "catalog_sha256", "artifact_sha256",
+                "manifest_sha256", "model_sequence_convention", "hf_registry"):
         if key in info:
             identity[key] = info[key]
     return identity
