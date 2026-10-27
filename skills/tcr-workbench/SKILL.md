@@ -152,9 +152,13 @@ Use `prepare-model --plan` for a local metadata-only memory estimate before a
 large-model run. Inference and CPU reference/conversion are separate phases;
 Apple CPU/GPU share RAM, while CUDA also needs host staging. Estimates are not
 OOM guarantees. Unknown capacity stays unknown. A resource block is actionable:
-choose a smaller model, reduce batching or free memory. Do not add
-`--allow-memory-risk` silently; it is an explicit resource-risk override and
-cannot bypass checkpoint/schema/parity checks. Preserve the requested device.
+offer a smaller model, reduced batching or freed memory first.
+`--allow-memory-risk` is an explicit resource-risk override and cannot bypass
+checkpoint/schema/parity checks. A request to pass the flag or to ignore the
+warning is not yet consent: first show the `--plan` estimate, say the run can
+exhaust memory and swap, freeze or be killed, and offer those alternatives.
+Give an override command only after the user confirms with that risk named.
+Preserve the requested device.
 After preparation, `--estimate-forwards` counts distinct model context rows
 after cache reuse, not peptide residues; its tiny-fixture extrapolation is not
 a calibrated workflow ETA. Elapsed worker heartbeats are not percentages.
