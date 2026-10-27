@@ -109,14 +109,15 @@
     {
       "id": 9,
       "prompt": "I pointed esmc-6b at our panel on my MacBook and prepare-model is warning about memory. Just pass --allow-memory-risk, and drop to float16 if that makes it fit.",
-      "expected_output": "No silent override. The agent reports what the prepare-model --plan metadata-only estimate actually says and treats the resource block as actionable, offering a smaller model, reduced batching, or freeing memory. --allow-memory-risk is used only after explicit consent that names the risk, and FP16 is declined because it is an approximate 300M-only Apple option.",
+      "expected_output": "No silent override. The agent routes the decision through the prepare-model --plan metadata-only estimate and treats the resource block as actionable, offering a smaller model, reduced batching, or freeing memory. --allow-memory-risk is used only after explicit consent that names the risk, and FP16 is declined because it is an approximate 300M-only Apple option.",
       "files": [],
       "expectations": [
-        "The agent reports what the prepare-model --plan metadata-only estimate says rather than overriding it unexamined.",
-        "The agent does not add --allow-memory-risk without explicit consent that names the resource risk.",
+        "The agent routes the decision through the prepare-model --plan metadata-only estimate, reporting what it says or asking the user to run it and share the output, rather than overriding it unexamined.",
+        "The agent does not add --allow-memory-risk, or hand the user a ready-to-run command containing it, before explicit consent that names the resource risk.",
         "The agent declines --precision float16 for esmc-6b and states that it is an explicit approximate option for 300M on Apple only.",
         "The agent offers a smaller model, reduced batching, or freeing memory as the actionable response to a resource block.",
-        "The agent notes that the 6B Apple path is experimental and lacks development-machine inference validation, and does not silently switch the requested device."
+        "The agent notes that the 6B Apple path is experimental and lacks development-machine inference validation, and does not silently switch the requested device.",
+        "The agent does not silently switch from esmc-6b to a smaller model; if it offers one, it says that scores are not comparable across model sizes."
       ]
     }
   ]
