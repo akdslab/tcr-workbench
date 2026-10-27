@@ -171,9 +171,11 @@ python3 tcr.py setup --device cpu --species mouse
 ```
 
 Weights are fetched and verified on **first use** (on `load`/`score`), not at setup. If that first
-use stops with an **estimated-memory** message, the model is too big for the machine — choose a
-smaller model or better hardware. `--allow-memory-risk` overrides that guard but can exhaust memory;
-**do not add it silently** — only with explicit user consent.
+use stops with an **estimated-memory** message, the model is too big for the machine — say so, and
+offer a smaller model or better hardware as the first fix. `--allow-memory-risk` overrides that guard
+but can exhaust memory; **do not add it silently**. A request to pass the flag or to ignore the
+warning is not yet consent: first explain that the run can swap, freeze or be killed, and offer the
+smaller model. Give an override command only after the user confirms with that risk named.
 
 ## Step 6 — verify
 
@@ -321,6 +323,7 @@ weights are cached under `.tcr/`.
 - **Mouse still needs `--species mouse`** on setup (installs mouse germlines) and on each analysis.
 - **Precision:** FP32 is the default and required for CPU/CUDA and for 600M/6B. Apple
   `--precision float16` is an approximate option for **300M only**; don't apply it elsewhere.
-- **Never `--allow-memory-risk` silently** — it can OOM the machine.
+- **Never `--allow-memory-risk` silently** — it can OOM the machine. "Just make it run" is not
+  consent until the user has heard that risk and confirmed.
 - Installing this skill does not authorize uploading the user's biological data, installing globally,
   or moving/publishing the checkout. Respect the authorization already given for the task.
